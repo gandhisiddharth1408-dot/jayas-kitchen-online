@@ -1,0 +1,21 @@
+{
+  "name": "jayas-kitchen-server",
+  "version": "1.0.0",
+  "description": "Backend API for Jaya's Kitchen online ordering system",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "razorpay": "^2.9.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
