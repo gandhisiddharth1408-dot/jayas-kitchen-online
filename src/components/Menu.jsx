@@ -16,6 +16,8 @@ const menuImages = {
   'paneer-thali.jpg': paneerThali,
 }
 
+const API_URL = import.meta.env.VITE_API_URL
+
 function Menu({
   cart = [],
   onAddToCart,
@@ -31,7 +33,9 @@ function Menu({
         setLoading(true)
         setError('')
 
-        const response = await fetch('/api/orders/menu')
+        const response = await fetch(
+          `${API_URL}/api/orders/menu`
+        )
 
         if (!response.ok) {
           throw new Error('Failed to fetch menu')

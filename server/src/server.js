@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import pool from './config/db.js'
 import ordersRouter from './routes/orders.js'
+import adminRouter from './routes/admin.js'
 
 dotenv.config()
 
@@ -12,6 +13,8 @@ const PORT = process.env.PORT || 5001
 
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
   process.env.FRONTEND_URL,
 ].filter(Boolean)
 
@@ -33,8 +36,18 @@ app.use(
   })
 )
 
+// Razorpay webhook needs the raw request body
+// for HMAC signature verification.
+app.use(
+  '/api/orders/payment/webhook',
+  express.raw({
+    type: 'application/json',
+  })
+)
+
 app.use(express.json())
 
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
@@ -42,9 +55,12 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+// Database test
 app.get('/api/db-test', async (req, res) => {
   try {
-    const result = await pool.query('SELECT NOW() AS current_time')
+    const result = await pool.query(
+      'SELECT NOW() AS current_time'
+    )
 
     res.json({
       success: true,
@@ -61,8 +77,25 @@ app.get('/api/db-test', async (req, res) => {
   }
 })
 
+// Customer + order APIs
 app.use('/api/orders', ordersRouter)
 
+// Admin authentication API
+app.use('/api/admin', adminRouter)
+
+// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
+
+  console.log(
+    `Admin username configured: ${
+      process.env.ADMIN_USERNAME ? 'YES' : 'NO'
+    }`
+  )
+
+  console.log(
+    `Admin password configured: ${
+      process.env.ADMIN_PASSWORD ? 'YES' : 'NO'
+    }`
+  )
 })

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Navbar from './components/Navbar'
 import Menu from './components/Menu'
 import Cart from './components/Cart'
@@ -7,8 +7,16 @@ import AdminDashboard from './components/AdminDashboard'
 import AdminOrders from './components/AdminOrders'
 import AdminMenu from './components/AdminMenu'
 import AdminCustomers from './components/AdminCustomers'
+import AdminLogin from './components/AdminLogin'
 
-function OrderSuccess({ order, onContinueShopping }) {
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:5001'
+
+function OrderSuccess({
+  order,
+  onContinueShopping,
+}) {
   return (
     <div className="min-h-screen bg-[#FFFDF5]">
       <Navbar />
@@ -64,8 +72,9 @@ function OrderSuccess({ order, onContinueShopping }) {
   )
 }
 
-function AdminHome() {
-  const [adminPage, setAdminPage] = useState('dashboard')
+function AdminHome({ onLogout }) {
+  const [adminPage, setAdminPage] =
+    useState('dashboard')
 
   return (
     <div className="min-h-screen bg-[#FFFDF5]">
@@ -81,18 +90,29 @@ function AdminHome() {
             </h1>
           </div>
 
-          <a
-            href="/"
-            className="rounded-full border border-green-200 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-50"
-          >
-            Customer Website
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href="/"
+              className="rounded-full border border-green-200 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-50"
+            >
+              Customer Website
+            </a>
+
+            <button
+              onClick={onLogout}
+              className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         <div className="border-t border-green-50">
           <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-8">
             <button
-              onClick={() => setAdminPage('dashboard')}
+              onClick={() =>
+                setAdminPage('dashboard')
+              }
               className={`whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition ${
                 adminPage === 'dashboard'
                   ? 'bg-green-700 text-white'
@@ -103,7 +123,9 @@ function AdminHome() {
             </button>
 
             <button
-              onClick={() => setAdminPage('orders')}
+              onClick={() =>
+                setAdminPage('orders')
+              }
               className={`whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition ${
                 adminPage === 'orders'
                   ? 'bg-green-700 text-white'
@@ -114,7 +136,9 @@ function AdminHome() {
             </button>
 
             <button
-              onClick={() => setAdminPage('menu')}
+              onClick={() =>
+                setAdminPage('menu')
+              }
               className={`whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition ${
                 adminPage === 'menu'
                   ? 'bg-green-700 text-white'
@@ -125,7 +149,9 @@ function AdminHome() {
             </button>
 
             <button
-              onClick={() => setAdminPage('customers')}
+              onClick={() =>
+                setAdminPage('customers')
+              }
               className={`whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition ${
                 adminPage === 'customers'
                   ? 'bg-green-700 text-white'
@@ -139,43 +165,174 @@ function AdminHome() {
       </header>
 
       {adminPage === 'dashboard' && (
-        <AdminDashboard />
+        <AdminDashboard
+          onAuthExpired={onLogout}
+        />
       )}
 
       {adminPage === 'orders' && (
-        <AdminOrders />
+        <AdminOrders
+          onAuthExpired={onLogout}
+        />
       )}
 
       {adminPage === 'menu' && (
-        <AdminMenu />
+        <AdminMenu
+          onAuthExpired={onLogout}
+        />
       )}
 
       {adminPage === 'customers' && (
-        <AdminCustomers />
+        <AdminCustomers
+          onAuthExpired={onLogout}
+        />
       )}
+    </div>
+  )
+}
+
+function AdminAuthLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#FFFDF5] px-4">
+      <div className="text-center">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-green-100 border-t-green-700" />
+
+        <p className="mt-4 font-semibold text-gray-700">
+          Checking admin authentication...
+        </p>
+      </div>
     </div>
   )
 }
 
 function App() {
   const [cart, setCart] = useState([])
-  const [isCartOpen, setIsCartOpen] = useState(false)
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
-  const [completedOrder, setCompletedOrder] = useState(null)
+  const [isCartOpen, setIsCartOpen] =
+    useState(false)
+  const [isCheckoutOpen, setIsCheckoutOpen] =
+    useState(false)
+  const [completedOrder, setCompletedOrder] =
+    useState(null)
 
   const isAdminPage =
     window.location.pathname === '/admin'
 
-  if (isAdminPage) {
-    return <AdminHome />
+  const [
+    isAdminLoggedIn,
+    setIsAdminLoggedIn,
+  ] = useState(false)
+
+  const [
+    isCheckingAdminAuth,
+    setIsCheckingAdminAuth,
+  ] = useState(isAdminPage)
+
+  useEffect(() => {
+    if (!isAdminPage) {
+      setIsCheckingAdminAuth(false)
+      return
+    }
+
+    const verifyAdmin = async () => {
+      const token = localStorage.getItem(
+        'jayasKitchenAdminToken'
+      )
+
+      if (!token) {
+        setIsAdminLoggedIn(false)
+        setIsCheckingAdminAuth(false)
+        return
+      }
+
+      try {
+        const response = await fetch(
+          `${API_URL}/api/admin/verify`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        )
+
+        if (
+          response.status === 401 ||
+          response.status === 403
+        ) {
+          localStorage.removeItem(
+            'jayasKitchenAdminToken'
+          )
+
+          setIsAdminLoggedIn(false)
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            'Admin authentication verification failed'
+          )
+        }
+
+        const data = await response.json()
+
+        if (data.success) {
+          setIsAdminLoggedIn(true)
+        } else {
+          localStorage.removeItem(
+            'jayasKitchenAdminToken'
+          )
+
+          setIsAdminLoggedIn(false)
+        }
+      } catch (error) {
+        console.error(
+          'Admin authentication verification error:',
+          error
+        )
+      } finally {
+        setIsCheckingAdminAuth(false)
+      }
+    }
+
+    verifyAdmin()
+  }, [isAdminPage])
+
+  const handleAdminLogin = () => {
+    setIsAdminLoggedIn(true)
   }
 
-  // Add item to cart
-  // Does NOT open the side cart.
+  const handleAdminLogout = () => {
+    localStorage.removeItem(
+      'jayasKitchenAdminToken'
+    )
+
+    setIsAdminLoggedIn(false)
+  }
+
+  if (isAdminPage && isCheckingAdminAuth) {
+    return <AdminAuthLoading />
+  }
+
+  if (isAdminPage && !isAdminLoggedIn) {
+    return (
+      <AdminLogin
+        onLogin={handleAdminLogin}
+      />
+    )
+  }
+
+  if (isAdminPage) {
+    return (
+      <AdminHome
+        onLogout={handleAdminLogout}
+      />
+    )
+  }
+
   const addToCart = (item) => {
     setCart((currentCart) => {
       const existingItem = currentCart.find(
-        (cartItem) => cartItem.id === item.id
+        (cartItem) =>
+          cartItem.id === item.id
       )
 
       if (existingItem) {
@@ -183,7 +340,8 @@ function App() {
           cartItem.id === item.id
             ? {
                 ...cartItem,
-                quantity: cartItem.quantity + 1,
+                quantity:
+                  cartItem.quantity + 1,
               }
             : cartItem
         )
@@ -199,7 +357,6 @@ function App() {
     })
   }
 
-  // Increase quantity
   const increaseQuantity = (id) => {
     setCart((currentCart) =>
       currentCart.map((item) =>
@@ -213,7 +370,6 @@ function App() {
     )
   }
 
-  // Decrease quantity
   const decreaseQuantity = (id) => {
     setCart((currentCart) =>
       currentCart
@@ -225,19 +381,24 @@ function App() {
               }
             : item
         )
-        .filter((item) => item.quantity > 0)
+        .filter(
+          (item) => item.quantity > 0
+        )
     )
   }
 
-  // Remove item completely
   const removeFromCart = (id) => {
     setCart((currentCart) =>
-      currentCart.filter((item) => item.id !== id)
+      currentCart.filter(
+        (item) => item.id !== id
+      )
     )
   }
 
-  // Update quantity from the menu
-  const updateMenuQuantity = (id, quantity) => {
+  const updateMenuQuantity = (
+    id,
+    quantity
+  ) => {
     if (quantity <= 0) {
       removeFromCart(id)
       return
@@ -255,7 +416,6 @@ function App() {
     )
   }
 
-  // Place order
   const handlePlaceOrder = (order) => {
     setCompletedOrder(order)
     setCart([])
@@ -263,13 +423,12 @@ function App() {
     setIsCheckoutOpen(false)
   }
 
-  // Total number of items
   const totalItems = cart.reduce(
-    (total, item) => total + item.quantity,
+    (total, item) =>
+      total + item.quantity,
     0
   )
 
-  // Order success
   if (completedOrder) {
     return (
       <OrderSuccess
@@ -281,7 +440,6 @@ function App() {
     )
   }
 
-  // Checkout
   if (isCheckoutOpen) {
     return (
       <Checkout
@@ -309,13 +467,14 @@ function App() {
             <h1 className="max-w-3xl text-4xl font-bold leading-tight text-gray-900 sm:text-5xl lg:text-6xl">
               Homemade food,
               <span className="text-green-700">
-                {' '}made with love.
+                {' '}
+                made with love.
               </span>
             </h1>
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-gray-600">
-              Order fresh homemade meals and delicious tiffin
-              from Jaya's Kitchen.
+              Order fresh homemade meals and
+              delicious tiffin from Jaya's Kitchen.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -343,9 +502,10 @@ function App() {
         />
       </main>
 
-      {/* Floating Cart Button */}
       <button
-        onClick={() => setIsCartOpen(true)}
+        onClick={() =>
+          setIsCartOpen(true)
+        }
         className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-full bg-green-700 px-5 py-3 font-semibold text-white shadow-lg transition hover:bg-green-800"
       >
         🛒 Cart
@@ -357,11 +517,12 @@ function App() {
         )}
       </button>
 
-      {/* Side Cart */}
       {isCartOpen && (
         <Cart
           cart={cart}
-          onClose={() => setIsCartOpen(false)}
+          onClose={() =>
+            setIsCartOpen(false)
+          }
           onIncrease={increaseQuantity}
           onDecrease={decreaseQuantity}
           onRemove={removeFromCart}

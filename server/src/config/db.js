@@ -6,19 +6,19 @@ dotenv.config()
 const { Pool } = pg
 
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-})
+  connectionString: `postgresql://${encodeURIComponent(
+    process.env.DB_USER
+  )}:${encodeURIComponent(
+    process.env.DB_PASSWORD
+  )}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
 
-pool.on('connect', () => {
-  console.log('Connected to PostgreSQL')
+  ssl: {
+    rejectUnauthorized: false,
+  },
 })
 
 pool.on('error', (error) => {
-  console.error('Unexpected PostgreSQL error:', error)
+  console.error('Unexpected PostgreSQL pool error:', error)
 })
 
 export default pool

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
-export default function AdminDashboard({ setActiveTab }) {
+const API_URL = import.meta.env.VITE_API_URL
+
+export default function AdminDashboard({
+  setActiveTab,
+  onAuthExpired,
+}) {
   const [dashboard, setDashboard] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -16,28 +21,41 @@ export default function AdminDashboard({ setActiveTab }) {
         window.AudioContext || window.webkitAudioContext
 
       if (!AudioContext) {
-        console.error('Web Audio API is not supported')
+        console.error(
+          'Web Audio API is not supported'
+        )
         return
       }
 
       if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext()
+        audioContextRef.current =
+          new AudioContext()
       }
 
-      if (audioContextRef.current.state === 'suspended') {
+      if (
+        audioContextRef.current.state ===
+        'suspended'
+      ) {
         await audioContextRef.current.resume()
       }
 
       // Play a short test sound
-      const audioContext = audioContextRef.current
+      const audioContext =
+        audioContextRef.current
 
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
+      const oscillator =
+        audioContext.createOscillator()
+
+      const gainNode =
+        audioContext.createGain()
 
       oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
+      gainNode.connect(
+        audioContext.destination
+      )
 
       oscillator.type = 'sine'
+
       oscillator.frequency.setValueAtTime(
         900,
         audioContext.currentTime
@@ -54,13 +72,16 @@ export default function AdminDashboard({ setActiveTab }) {
       )
 
       oscillator.start()
+
       oscillator.stop(
         audioContext.currentTime + 0.4
       )
 
       setSoundEnabled(true)
 
-      console.log('Order notification sound enabled')
+      console.log(
+        'Order notification sound enabled'
+      )
     } catch (error) {
       console.error(
         'Failed to enable notification sound:',
@@ -71,23 +92,34 @@ export default function AdminDashboard({ setActiveTab }) {
 
   const playNotificationSound = async () => {
     try {
-      const audioContext = audioContextRef.current
+      const audioContext =
+        audioContextRef.current
 
       if (!audioContext) {
-        console.log('Audio is not enabled')
+        console.log(
+          'Audio is not enabled'
+        )
         return
       }
 
-      if (audioContext.state === 'suspended') {
+      if (
+        audioContext.state ===
+        'suspended'
+      ) {
         await audioContext.resume()
       }
 
       // First beep
-      const oscillator1 = audioContext.createOscillator()
-      const gainNode1 = audioContext.createGain()
+      const oscillator1 =
+        audioContext.createOscillator()
+
+      const gainNode1 =
+        audioContext.createGain()
 
       oscillator1.connect(gainNode1)
-      gainNode1.connect(audioContext.destination)
+      gainNode1.connect(
+        audioContext.destination
+      )
 
       oscillator1.type = 'sine'
 
@@ -107,16 +139,22 @@ export default function AdminDashboard({ setActiveTab }) {
       )
 
       oscillator1.start()
+
       oscillator1.stop(
         audioContext.currentTime + 0.25
       )
 
       // Second beep
-      const oscillator2 = audioContext.createOscillator()
-      const gainNode2 = audioContext.createGain()
+      const oscillator2 =
+        audioContext.createOscillator()
+
+      const gainNode2 =
+        audioContext.createGain()
 
       oscillator2.connect(gainNode2)
-      gainNode2.connect(audioContext.destination)
+      gainNode2.connect(
+        audioContext.destination
+      )
 
       oscillator2.type = 'sine'
 
@@ -142,7 +180,6 @@ export default function AdminDashboard({ setActiveTab }) {
       oscillator2.stop(
         audioContext.currentTime + 0.6
       )
-
     } catch (error) {
       console.error(
         'Notification sound failed:',
@@ -153,30 +190,71 @@ export default function AdminDashboard({ setActiveTab }) {
 
   const fetchDashboard = async () => {
     try {
-      const response = await fetch(
-        'http://localhost:5001/api/orders/admin/dashboard'
+      const token = localStorage.getItem(
+        'jayasKitchenAdminToken'
       )
 
+      if (!token) {
+        if (onAuthExpired) {
+          onAuthExpired()
+        }
+
+        return
+      }
+
+      const response = await fetch(
+        `${API_URL}/api/orders/admin/dashboard`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        localStorage.removeItem(
+          'jayasKitchenAdminToken'
+        )
+
+        if (onAuthExpired) {
+          onAuthExpired()
+        }
+
+        return
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to fetch dashboard data')
+        throw new Error(
+          'Failed to fetch dashboard data'
+        )
       }
 
       const data = await response.json()
 
       if (!data.success) {
         throw new Error(
-          data.message || 'Failed to load dashboard'
+          data.message ||
+            'Failed to load dashboard'
         )
       }
 
-      const dashboardData = data.dashboard
+      const dashboardData =
+        data.dashboard
 
-      if (dashboardData.recentOrders?.length > 0) {
-        const latestOrder = dashboardData.recentOrders[0]
+      if (
+        dashboardData.recentOrders?.length >
+        0
+      ) {
+        const latestOrder =
+          dashboardData.recentOrders[0]
 
         if (
           lastOrderIdRef.current !== null &&
-          latestOrder.id > lastOrderIdRef.current
+          latestOrder.id >
+            lastOrderIdRef.current
         ) {
           setNewOrder(latestOrder)
 
@@ -191,19 +269,25 @@ export default function AdminDashboard({ setActiveTab }) {
 
         if (
           lastOrderIdRef.current === null ||
-          latestOrder.id > lastOrderIdRef.current
+          latestOrder.id >
+            lastOrderIdRef.current
         ) {
-          lastOrderIdRef.current = latestOrder.id
+          lastOrderIdRef.current =
+            latestOrder.id
         }
       }
 
       setDashboard(dashboardData)
       setError('')
     } catch (error) {
-      console.error('Dashboard error:', error)
+      console.error(
+        'Dashboard error:',
+        error
+      )
 
       setError(
-        error.message || 'Failed to load dashboard'
+        error.message ||
+          'Failed to load dashboard'
       )
     } finally {
       setLoading(false)
@@ -224,7 +308,8 @@ export default function AdminDashboard({ setActiveTab }) {
     if (setActiveTab) {
       setActiveTab('orders')
     } else {
-      window.location.href = '/admin?tab=orders'
+      window.location.href =
+        '/admin?tab=orders'
     }
   }
 
@@ -263,8 +348,11 @@ export default function AdminDashboard({ setActiveTab }) {
     return null
   }
 
-  const orderStatuses = dashboard.orderStatuses || {}
-  const recentOrders = dashboard.recentOrders || []
+  const orderStatuses =
+    dashboard.orderStatuses || {}
+
+  const recentOrders =
+    dashboard.recentOrders || []
 
   return (
     <div className="space-y-6">
@@ -322,7 +410,8 @@ export default function AdminDashboard({ setActiveTab }) {
               <p className="mt-1 text-green-700">
                 Order Total:{' '}
                 <strong>
-                  ₹{Number(
+                  ₹
+                  {Number(
                     newOrder.total ?? 0
                   ).toFixed(2)}
                 </strong>
@@ -339,7 +428,9 @@ export default function AdminDashboard({ setActiveTab }) {
               </button>
 
               <button
-                onClick={() => setNewOrder(null)}
+                onClick={() =>
+                  setNewOrder(null)
+                }
                 className="rounded-lg border border-green-600 px-4 py-2 font-medium text-green-700 hover:bg-green-100"
               >
                 Dismiss
@@ -381,7 +472,8 @@ export default function AdminDashboard({ setActiveTab }) {
           </p>
 
           <p className="mt-2 text-3xl font-bold text-gray-900">
-            ₹{Number(
+            ₹
+            {Number(
               dashboard.todayRevenue ?? 0
             ).toFixed(2)}
           </p>
@@ -403,7 +495,8 @@ export default function AdminDashboard({ setActiveTab }) {
           </p>
 
           <p className="mt-2 text-3xl font-bold text-gray-900">
-            ₹{Number(
+            ₹
+            {Number(
               dashboard.totalRevenue ?? 0
             ).toFixed(2)}
           </p>
@@ -486,7 +579,7 @@ export default function AdminDashboard({ setActiveTab }) {
           </div>
 
           <div className="rounded-xl bg-purple-50 p-4">
-            <p className="text-sm text-purple-700">
+            <p className="text-sm font-bold text-purple-800">
               Preparing
             </p>
 
@@ -606,7 +699,8 @@ export default function AdminDashboard({ setActiveTab }) {
                     </td>
 
                     <td className="px-4 py-4 font-medium">
-                      ₹{Number(
+                      ₹
+                      {Number(
                         order.total ?? 0
                       ).toFixed(2)}
                     </td>
@@ -615,7 +709,8 @@ export default function AdminDashboard({ setActiveTab }) {
 
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-medium ${
-                          order.paymentStatus === 'paid'
+                          order.paymentStatus ===
+                          'paid'
                             ? 'bg-green-100 text-green-700'
                             : 'bg-yellow-100 text-yellow-700'
                         }`}
@@ -630,7 +725,10 @@ export default function AdminDashboard({ setActiveTab }) {
                       <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-700">
                         {String(
                           order.orderStatus || ''
-                        ).replaceAll('_', ' ')}
+                        ).replaceAll(
+                          '_',
+                          ' '
+                        )}
                       </span>
 
                     </td>

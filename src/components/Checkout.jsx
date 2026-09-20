@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+const API_URL = import.meta.env.VITE_API_URL
+
 function Checkout({
   cart,
   onBackToCart,
@@ -15,21 +17,28 @@ function Checkout({
     paymentMethod: 'cash',
   })
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSubmitting, setIsSubmitting] =
+    useState(false)
+
   const [error, setError] = useState('')
 
   const subtotal = cart.reduce(
-    (total, item) => total + item.price * item.quantity,
+    (total, item) =>
+      total + item.price * item.quantity,
     0
   )
 
   const deliveryCharge =
-    formData.deliveryType === 'delivery' ? 30 : 0
+    formData.deliveryType === 'delivery'
+      ? 30
+      : 0
 
-  const total = subtotal + deliveryCharge
+  const total =
+    subtotal + deliveryCharge
 
   const handleChange = (event) => {
-    const { name, value } = event.target
+    const { name, value } =
+      event.target
 
     setFormData((current) => ({
       ...current,
@@ -38,6 +47,10 @@ function Checkout({
 
     setError('')
   }
+
+  // --------------------------------------------------
+  // SAVE ORDER
+  // --------------------------------------------------
 
   const saveOrder = async ({
     paymentMethod,
@@ -48,25 +61,29 @@ function Checkout({
   }) => {
     const order = {
       customer: {
-        name: formData.name,
-        phone: formData.phone,
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
       },
 
       items: cart,
 
-      deliveryType: formData.deliveryType,
+      deliveryType:
+        formData.deliveryType,
 
       address:
-        formData.deliveryType === 'delivery'
-          ? formData.address
+        formData.deliveryType ===
+        'delivery'
+          ? formData.address.trim()
           : null,
 
       landmark:
-        formData.deliveryType === 'delivery'
-          ? formData.landmark
+        formData.deliveryType ===
+        'delivery'
+          ? formData.landmark.trim()
           : null,
 
-      instructions: formData.instructions,
+      instructions:
+        formData.instructions.trim(),
 
       paymentMethod,
       paymentStatus,
@@ -75,234 +92,370 @@ function Checkout({
       razorpayPaymentId,
       razorpaySignature,
 
+      // These are only for frontend display.
+      // The backend recalculates the real values.
       subtotal,
       deliveryCharge,
       total,
     }
 
     const response = await fetch(
-      'http://localhost:5001/api/orders',
+      `${API_URL}/api/orders`,
       {
         method: 'POST',
+
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type':
+            'application/json',
         },
+
         body: JSON.stringify(order),
       }
     )
 
-    const data = await response.json()
+    const data =
+      await response.json()
 
     if (!response.ok) {
       throw new Error(
-        data.message || 'Failed to place order'
+        data.message ||
+          'Failed to place order'
       )
     }
 
     return data.order
   }
 
-  const handleOnlinePayment = async () => {
-    try {
-      setIsSubmitting(true)
-      setError('')
+  // --------------------------------------------------
+  // ONLINE PAYMENT
+  // --------------------------------------------------
 
-      // Step 1:
-      // Send cart information to the backend.
-      // The backend calculates the real price
-      // directly from PostgreSQL.
-      const createResponse = await fetch(
-        'http://localhost:5001/api/orders/payment/create-order',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            items: cart.map((item) => ({
-              id: item.id,
-              quantity: item.quantity,
-            })),
+  const handleOnlinePayment =
+    async () => {
+      try {
+        setIsSubmitting(true)
+        setError('')
 
-            deliveryType:
-              formData.deliveryType,
-          }),
-        }
-      )
+        // --------------------------------------------
+        // STEP 1
+        // Ask backend to create Razorpay order.
+        // Backend calculates the real amount
+        // using PostgreSQL.
+        // --------------------------------------------
 
-      const createData =
-        await createResponse.json()
+        const createResponse =
+          await fetch(
+            `${API_URL}/api/orders/payment/create-order`,
+            {
+              method: 'POST',
 
-      if (!createResponse.ok) {
-        throw new Error(
-          createData.message ||
-            'Failed to create payment order'
-        )
-      }
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
 
-      const razorpayOrder = createData.order
+              body: JSON.stringify({
+                items: cart.map(
+                  (item) => ({
+                    id: item.id,
+                    quantity:
+                      item.quantity,
+                  })
+                ),
 
-      // Step 2:
-      // Open Razorpay Checkout
-      const options = {
-        key: 'rzp_test_TdpE7m32oogB4S',
-
-        amount: razorpayOrder.amount,
-
-        currency: razorpayOrder.currency,
-
-        name: "Jaya's Kitchen",
-
-        description: 'Online Food Order',
-
-        order_id: razorpayOrder.id,
-
-        prefill: {
-          name: formData.name,
-          contact: formData.phone,
-        },
-
-        theme: {
-          color: '#15803d',
-        },
-
-        handler: async function (paymentResponse) {
-          try {
-            // Step 3:
-            // Verify payment on our backend.
-            const verifyResponse = await fetch(
-              'http://localhost:5001/api/orders/payment/verify',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-
-                body: JSON.stringify({
-                  razorpayOrderId:
-                    paymentResponse.razorpay_order_id,
-
-                  razorpayPaymentId:
-                    paymentResponse.razorpay_payment_id,
-
-                  razorpaySignature:
-                    paymentResponse.razorpay_signature,
-                }),
-              }
-            )
-
-            const verifyData =
-              await verifyResponse.json()
-
-            if (!verifyResponse.ok) {
-              throw new Error(
-                verifyData.message ||
-                  'Payment verification failed'
-              )
+                deliveryType:
+                  formData.deliveryType,
+              }),
             }
-
-            // Step 4:
-            // Save the order only after
-            // successful payment verification.
-            const savedOrder =
-              await saveOrder({
-                paymentMethod: 'online',
-
-                paymentStatus: 'paid',
-
-                razorpayOrderId:
-                  paymentResponse.razorpay_order_id,
-
-                razorpayPaymentId:
-                  paymentResponse.razorpay_payment_id,
-
-                razorpaySignature:
-                  paymentResponse.razorpay_signature,
-              })
-
-            onPlaceOrder(savedOrder)
-          } catch (error) {
-            console.error(
-              'Online payment processing failed:',
-              error
-            )
-
-            setError(
-              error.message ||
-                'Payment was successful, but we could not complete your order. Please contact us.'
-            )
-
-            setIsSubmitting(false)
-          }
-        },
-
-        modal: {
-          ondismiss: function () {
-            setIsSubmitting(false)
-
-            setError(
-              'Payment was cancelled. Your order has not been placed.'
-            )
-          },
-        },
-      }
-
-      const razorpay =
-        new window.Razorpay(options)
-
-      razorpay.on(
-        'payment.failed',
-        function (response) {
-          console.error(
-            'Razorpay payment failed:',
-            response.error
           )
 
-          setError(
-            response.error?.description ||
-              'Payment failed. Please try again.'
-          )
+        const createData =
+          await createResponse.json()
 
-          setIsSubmitting(false)
+        if (!createResponse.ok) {
+          throw new Error(
+            createData.message ||
+              'Failed to create payment order'
+          )
         }
-      )
 
-      razorpay.open()
-    } catch (error) {
-      console.error(
-        'Online payment initialization failed:',
-        error
-      )
+        const razorpayOrder =
+          createData.order
 
-      setError(
-        error.message ||
-          'Unable to start online payment.'
-      )
+        // --------------------------------------------
+        // STEP 2
+        // Validate backend response
+        // before opening Razorpay.
+        // --------------------------------------------
 
-      setIsSubmitting(false)
+        if (
+          !razorpayOrder ||
+          !razorpayOrder.id ||
+          !razorpayOrder.amount ||
+          !razorpayOrder.currency ||
+          !razorpayOrder.keyId
+        ) {
+          throw new Error(
+            'Invalid payment order received from server'
+          )
+        }
+
+        // Make sure Razorpay Checkout
+        // is actually loaded.
+        if (
+          typeof window.Razorpay !==
+          'function'
+        ) {
+          throw new Error(
+            'Razorpay Checkout could not be loaded. Please refresh the page and try again.'
+          )
+        }
+
+        // --------------------------------------------
+        // STEP 3
+        // Open Razorpay Checkout.
+        //
+        // IMPORTANT:
+        // keyId comes from our backend.
+        //
+        // We NEVER send the Razorpay
+        // Key Secret to the browser.
+        // --------------------------------------------
+
+        const options = {
+          key:
+            razorpayOrder.keyId,
+
+          amount:
+            razorpayOrder.amount,
+
+          currency:
+            razorpayOrder.currency,
+
+          name: "Jaya's Kitchen",
+
+          description:
+            'Online Food Order',
+
+          order_id:
+            razorpayOrder.id,
+
+          prefill: {
+            name:
+              formData.name.trim(),
+
+            contact:
+              formData.phone.trim(),
+          },
+
+          theme: {
+            color: '#15803d',
+          },
+
+          handler:
+            async function (
+              paymentResponse
+            ) {
+              try {
+                // ----------------------------------
+                // STEP 4
+                // Verify payment on backend.
+                // ----------------------------------
+
+                const verifyResponse =
+                  await fetch(
+                    `${API_URL}/api/orders/payment/verify`,
+                    {
+                      method: 'POST',
+
+                      headers: {
+                        'Content-Type':
+                          'application/json',
+                      },
+
+                      body: JSON.stringify({
+                        razorpayOrderId:
+                          paymentResponse.razorpay_order_id,
+
+                        razorpayPaymentId:
+                          paymentResponse.razorpay_payment_id,
+
+                        razorpaySignature:
+                          paymentResponse.razorpay_signature,
+                      }),
+                    }
+                  )
+
+                const verifyData =
+                  await verifyResponse.json()
+
+                if (
+                  !verifyResponse.ok
+                ) {
+                  throw new Error(
+                    verifyData.message ||
+                      'Payment verification failed'
+                  )
+                }
+
+                // ----------------------------------
+                // STEP 5
+                // Save the actual Jaya's Kitchen
+                // order after successful verification.
+                // ----------------------------------
+
+                /*
+                 * If the payment was already processed,
+                 * don't create another order.
+                 *
+                 * This protects against accidental
+                 * duplicate submissions.
+                 */
+                if (
+                  verifyData.alreadyProcessed
+                ) {
+                  throw new Error(
+                    'This payment has already been processed. Please contact Jaya\'s Kitchen if you do not see your order confirmation.'
+                  )
+                }
+
+                const savedOrder =
+                  await saveOrder({
+                    paymentMethod:
+                      'online',
+
+                    paymentStatus:
+                      'paid',
+
+                    razorpayOrderId:
+                      paymentResponse.razorpay_order_id,
+
+                    razorpayPaymentId:
+                      paymentResponse.razorpay_payment_id,
+
+                    razorpaySignature:
+                      paymentResponse.razorpay_signature,
+                  })
+
+                onPlaceOrder(
+                  savedOrder
+                )
+              } catch (error) {
+                console.error(
+                  'Online payment processing failed:',
+                  error
+                )
+
+                setError(
+                  error.message ||
+                    'Payment was successful, but we could not complete your order. Please contact Jaya\'s Kitchen.'
+                )
+
+                setIsSubmitting(false)
+              }
+            },
+
+          modal: {
+            ondismiss:
+              function () {
+                setIsSubmitting(
+                  false
+                )
+
+                setError(
+                  'Payment was cancelled. Your order has not been placed.'
+                )
+              },
+          },
+        }
+
+        const razorpay =
+          new window.Razorpay(
+            options
+          )
+
+        // --------------------------------------------
+        // PAYMENT FAILED
+        // --------------------------------------------
+
+        razorpay.on(
+          'payment.failed',
+          function (response) {
+            console.error(
+              'Razorpay payment failed:',
+              response.error
+            )
+
+            setError(
+              response.error
+                ?.description ||
+                'Payment failed. Please try again.'
+            )
+
+            setIsSubmitting(
+              false
+            )
+          }
+        )
+
+        // --------------------------------------------
+        // OPEN RAZORPAY
+        // --------------------------------------------
+
+        razorpay.open()
+      } catch (error) {
+        console.error(
+          'Online payment initialization failed:',
+          error
+        )
+
+        setError(
+          error.message ||
+            'Unable to start online payment.'
+        )
+
+        setIsSubmitting(false)
+      }
     }
-  }
 
-  const handleSubmit = async (event) => {
+  // --------------------------------------------------
+  // SUBMIT CHECKOUT
+  // --------------------------------------------------
+
+  const handleSubmit = async (
+    event
+  ) => {
     event.preventDefault()
 
     setIsSubmitting(true)
     setError('')
 
     try {
+      // --------------------------------------------
+      // ONLINE PAYMENT
+      // --------------------------------------------
+
       if (
-        formData.paymentMethod === 'online'
+        formData.paymentMethod ===
+        'online'
       ) {
         await handleOnlinePayment()
         return
       }
 
-      const savedOrder = await saveOrder({
-        paymentMethod: 'cash',
-        paymentStatus: 'pending',
-      })
+      // --------------------------------------------
+      // CASH ORDER
+      // --------------------------------------------
 
-      onPlaceOrder(savedOrder)
+      const savedOrder =
+        await saveOrder({
+          paymentMethod: 'cash',
+          paymentStatus: 'pending',
+        })
+
+      onPlaceOrder(
+        savedOrder
+      )
     } catch (error) {
       console.error(
         'Order submission failed:',
@@ -334,7 +487,8 @@ function Checkout({
           </h1>
 
           <p className="mt-2 text-gray-600">
-            Enter your details to place your order.
+            Enter your details to place
+            your order.
           </p>
         </div>
 
@@ -348,7 +502,9 @@ function Checkout({
           onSubmit={handleSubmit}
           className="grid gap-8 lg:grid-cols-[1fr_380px]"
         >
+          {/* CUSTOMER + DELIVERY */}
           <div className="space-y-6">
+            {/* CUSTOMER DETAILS */}
             <div className="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900">
                 Customer Details
@@ -363,8 +519,12 @@ function Checkout({
                   <input
                     type="text"
                     name="name"
-                    value={formData.name}
-                    onChange={handleChange}
+                    value={
+                      formData.name
+                    }
+                    onChange={
+                      handleChange
+                    }
                     required
                     placeholder="Enter your name"
                     className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
@@ -379,8 +539,12 @@ function Checkout({
                   <input
                     type="tel"
                     name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
+                    value={
+                      formData.phone
+                    }
+                    onChange={
+                      handleChange
+                    }
                     required
                     pattern="[0-9]{10}"
                     placeholder="10-digit mobile number"
@@ -390,6 +554,7 @@ function Checkout({
               </div>
             </div>
 
+            {/* DELIVERY OPTIONS */}
             <div className="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900">
                 Delivery Options
@@ -405,7 +570,9 @@ function Checkout({
                       formData.deliveryType ===
                       'delivery'
                     }
-                    onChange={handleChange}
+                    onChange={
+                      handleChange
+                    }
                     className="mr-2"
                   />
 
@@ -427,7 +594,9 @@ function Checkout({
                       formData.deliveryType ===
                       'pickup'
                     }
-                    onChange={handleChange}
+                    onChange={
+                      handleChange
+                    }
                     className="mr-2"
                   />
 
@@ -442,6 +611,7 @@ function Checkout({
               </div>
             </div>
 
+            {/* DELIVERY ADDRESS */}
             {formData.deliveryType ===
               'delivery' && (
               <div className="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
@@ -457,8 +627,12 @@ function Checkout({
 
                     <textarea
                       name="address"
-                      value={formData.address}
-                      onChange={handleChange}
+                      value={
+                        formData.address
+                      }
+                      onChange={
+                        handleChange
+                      }
                       required
                       rows="3"
                       placeholder="House / Flat, Street, Area"
@@ -474,8 +648,12 @@ function Checkout({
                     <input
                       type="text"
                       name="landmark"
-                      value={formData.landmark}
-                      onChange={handleChange}
+                      value={
+                        formData.landmark
+                      }
+                      onChange={
+                        handleChange
+                      }
                       placeholder="Nearby landmark"
                       className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
                     />
@@ -484,6 +662,7 @@ function Checkout({
               </div>
             )}
 
+            {/* INSTRUCTIONS */}
             <div className="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900">
                 Additional Instructions
@@ -491,14 +670,19 @@ function Checkout({
 
               <textarea
                 name="instructions"
-                value={formData.instructions}
-                onChange={handleChange}
+                value={
+                  formData.instructions
+                }
+                onChange={
+                  handleChange
+                }
                 rows="3"
                 placeholder="Any special instructions for your order?"
                 className="mt-5 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
               />
             </div>
 
+            {/* PAYMENT METHOD */}
             <div className="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900">
                 Payment Method
@@ -514,17 +698,21 @@ function Checkout({
                       formData.paymentMethod ===
                       'cash'
                     }
-                    onChange={handleChange}
+                    onChange={
+                      handleChange
+                    }
                     className="mr-3"
                   />
 
                   <div>
                     <p className="font-semibold">
-                      Cash on Delivery / Pickup
+                      Cash on Delivery /
+                      Pickup
                     </p>
 
                     <p className="text-sm text-gray-500">
-                      Pay when you receive your order.
+                      Pay when you receive
+                      your order.
                     </p>
                   </div>
                 </label>
@@ -538,7 +726,9 @@ function Checkout({
                       formData.paymentMethod ===
                       'online'
                     }
-                    onChange={handleChange}
+                    onChange={
+                      handleChange
+                    }
                     className="mr-3"
                   />
 
@@ -548,7 +738,8 @@ function Checkout({
                     </p>
 
                     <p className="text-sm text-gray-500">
-                      Pay securely online with Razorpay.
+                      Pay securely online
+                      with Razorpay.
                     </p>
                   </div>
                 </label>
@@ -556,6 +747,7 @@ function Checkout({
             </div>
           </div>
 
+          {/* ORDER SUMMARY */}
           <div>
             <div className="sticky top-6 rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900">
@@ -563,58 +755,80 @@ function Checkout({
               </h2>
 
               <div className="mt-5 space-y-4">
-                {cart.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex justify-between gap-4"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {item.name}
-                      </p>
+                {cart.map(
+                  (item) => (
+                    <div
+                      key={item.id}
+                      className="flex justify-between gap-4"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {item.name}
+                        </p>
 
-                      <p className="text-sm text-gray-500">
-                        {item.quantity} × ₹
-                        {item.price}
+                        <p className="text-sm text-gray-500">
+                          {
+                            item.quantity
+                          }{' '}
+                          × ₹
+                          {
+                            item.price
+                          }
+                        </p>
+                      </div>
+
+                      <p className="font-semibold">
+                        ₹
+                        {item.price *
+                          item.quantity}
                       </p>
                     </div>
-
-                    <p className="font-semibold">
-                      ₹
-                      {item.price *
-                        item.quantity}
-                    </p>
-                  </div>
-                ))}
+                  )
+                )}
               </div>
 
               <div className="my-5 border-t border-gray-100" />
 
               <div className="space-y-3">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span>
-                  <span>₹{subtotal}</span>
+                  <span>
+                    Subtotal
+                  </span>
+
+                  <span>
+                    ₹{subtotal}
+                  </span>
                 </div>
 
                 <div className="flex justify-between text-gray-600">
-                  <span>Delivery</span>
+                  <span>
+                    Delivery
+                  </span>
 
                   <span>
-                    {deliveryCharge === 0
+                    {deliveryCharge ===
+                    0
                       ? 'Free'
                       : `₹${deliveryCharge}`}
                   </span>
                 </div>
 
                 <div className="flex justify-between border-t border-gray-100 pt-3 text-lg font-bold text-gray-900">
-                  <span>Total</span>
-                  <span>₹{total}</span>
+                  <span>
+                    Total
+                  </span>
+
+                  <span>
+                    ₹{total}
+                  </span>
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={
+                  isSubmitting
+                }
                 className="mt-6 w-full rounded-full bg-green-700 py-4 font-bold text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting
