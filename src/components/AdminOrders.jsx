@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+const API_URL = import.meta.env.VITE_API_URL
+
 function AdminOrders() {
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -12,7 +14,7 @@ function AdminOrders() {
       setError('')
 
       const response = await fetch(
-        'http://localhost:5001/api/orders/admin/all'
+        `${API_URL}/api/orders/admin/all`
       )
 
       const data = await response.json()
@@ -45,7 +47,7 @@ function AdminOrders() {
       setError('')
 
       const response = await fetch(
-        `http://localhost:5001/api/orders/admin/${orderId}/status`,
+        `${API_URL}/api/orders/admin/${orderId}/status`,
         {
           method: 'PATCH',
           headers: {
@@ -119,13 +121,46 @@ function AdminOrders() {
     return 'bg-gray-100 text-gray-800'
   }
 
+  const getQuickAction = (status) => {
+    const actions = {
+      pending: {
+        label: 'Confirm Order',
+        nextStatus: 'confirmed',
+      },
+
+      confirmed: {
+        label: 'Start Preparing',
+        nextStatus: 'preparing',
+      },
+
+      preparing: {
+        label: 'Out for Delivery',
+        nextStatus: 'out_for_delivery',
+      },
+
+      out_for_delivery: {
+        label: 'Mark Delivered',
+        nextStatus: 'completed',
+      },
+    }
+
+    return actions[status] || null
+  }
+
   const totalRevenue = orders.reduce(
-    (total, order) => total + order.total,
+    (total, order) => total + Number(order.total || 0),
     0
   )
 
   const pendingOrders = orders.filter(
     (order) => order.orderStatus === 'pending'
+  ).length
+
+  const activeOrders = orders.filter(
+    (order) =>
+      !['completed', 'cancelled'].includes(
+        order.orderStatus
+      )
   ).length
 
   return (
@@ -153,7 +188,9 @@ function AdminOrders() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+
+        {/* Summary */}
+        <div className="mb-8 grid gap-4 sm:grid-cols-4">
           <div className="rounded-2xl border border-green-100 bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Total Orders
@@ -164,13 +201,23 @@ function AdminOrders() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-green-100 bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-yellow-100 bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Pending Orders
             </p>
 
-            <p className="mt-2 text-3xl font-bold text-gray-900">
+            <p className="mt-2 text-3xl font-bold text-yellow-700">
               {pendingOrders}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">
+              Active Orders
+            </p>
+
+            <p className="mt-2 text-3xl font-bold text-blue-700">
+              {activeOrders}
             </p>
           </div>
 
@@ -179,7 +226,7 @@ function AdminOrders() {
               Total Revenue
             </p>
 
-            <p className="mt-2 text-3xl font-bold text-gray-900">
+            <p className="mt-2 text-3xl font-bold text-green-700">
               ₹{totalRevenue}
             </p>
           </div>
@@ -213,205 +260,275 @@ function AdminOrders() {
 
         {!isLoading && orders.length > 0 && (
           <div className="space-y-6">
-            {orders.map((order) => (
-              <div
-                key={order.id}
-                className="overflow-hidden rounded-2xl border border-green-100 bg-white shadow-sm"
-              >
-                <div className="flex flex-col gap-4 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-xl font-bold text-gray-900">
-                        Order #{order.id}
-                      </h2>
 
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${getStatusClasses(
-                          order.orderStatus
-                        )}`}
-                      >
-                        {order.orderStatus.replaceAll(
-                          '_',
-                          ' '
-                        )}
-                      </span>
-                    </div>
+            {orders.map((order) => {
+              const quickAction = getQuickAction(
+                order.orderStatus
+              )
 
-                    <p className="mt-1 text-sm text-gray-500">
-                      {formatDate(order.createdAt)}
-                    </p>
-                  </div>
+              return (
+                <div
+                  key={order.id}
+                  className="overflow-hidden rounded-2xl border border-green-100 bg-white shadow-sm"
+                >
 
-                  <div className="text-left sm:text-right">
-                    <p className="text-sm text-gray-500">
-                      Order Total
-                    </p>
-
-                    <p className="text-2xl font-bold text-green-700">
-                      ₹{order.total}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="border-b border-gray-100 bg-green-50/50 px-5 py-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  {/* Order Header */}
+                  <div className="flex flex-col gap-4 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="font-semibold text-gray-900">
-                        Update Order Status
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-3">
+
+                        <h2 className="text-xl font-bold text-gray-900">
+                          Order #{order.id}
+                        </h2>
+
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${getStatusClasses(
+                            order.orderStatus
+                          )}`}
+                        >
+                          {order.orderStatus.replaceAll(
+                            '_',
+                            ' '
+                          )}
+                        </span>
+
+                      </div>
 
                       <p className="mt-1 text-sm text-gray-500">
-                        Change the current status of this order.
+                        {formatDate(order.createdAt)}
                       </p>
                     </div>
 
-                    <select
-                      value={order.orderStatus}
-                      onChange={(event) =>
-                        updateOrderStatus(
-                          order.id,
-                          event.target.value
-                        )
-                      }
-                      disabled={updatingOrderId === order.id}
-                      className="w-full rounded-xl border border-green-200 bg-white px-4 py-3 text-sm font-semibold capitalize text-gray-900 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-64"
-                    >
-                      <option value="pending">
-                        Pending
-                      </option>
-
-                      <option value="confirmed">
-                        Confirmed
-                      </option>
-
-                      <option value="preparing">
-                        Preparing
-                      </option>
-
-                      <option value="out_for_delivery">
-                        Out for Delivery
-                      </option>
-
-                      <option value="completed">
-                        Completed
-                      </option>
-
-                      <option value="cancelled">
-                        Cancelled
-                      </option>
-                    </select>
-                  </div>
-
-                  {updatingOrderId === order.id && (
-                    <p className="mt-2 text-right text-xs font-medium text-green-700">
-                      Updating status...
-                    </p>
-                  )}
-
-                  {order.updatedAt !== order.createdAt && (
-                    <p className="mt-2 text-xs text-gray-500">
-                      Last updated:{' '}
-                      {formatDate(order.updatedAt)}
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid gap-6 p-5 lg:grid-cols-3">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      Customer
-                    </h3>
-
-                    <p className="mt-2 text-gray-700">
-                      {order.customer.name}
-                    </p>
-
-                    <p className="mt-1 text-sm text-gray-500">
-                      {order.customer.phone}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      Delivery
-                    </h3>
-
-                    <p className="mt-2 capitalize text-gray-700">
-                      {order.deliveryType}
-                    </p>
-
-                    {order.address && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        {order.address}
+                    <div className="text-left sm:text-right">
+                      <p className="text-sm text-gray-500">
+                        Order Total
                       </p>
-                    )}
 
-                    {order.landmark && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        Landmark: {order.landmark}
+                      <p className="text-2xl font-bold text-green-700">
+                        ₹{order.total}
                       </p>
-                    )}
+                    </div>
                   </div>
 
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      Payment
-                    </h3>
+                  {/* Quick Action */}
+                  {quickAction && (
+                    <div className="border-b border-green-100 bg-green-50/60 px-5 py-5">
 
-                    <p className="mt-2 capitalize text-gray-700">
-                      {order.paymentMethod}
-                    </p>
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-                    <p className="mt-1 text-sm text-gray-500">
-                      Status: {order.paymentStatus}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-100 px-5 py-5">
-                  <h3 className="font-semibold text-gray-900">
-                    Items
-                  </h3>
-
-                  <div className="mt-4 space-y-3">
-                    {order.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between rounded-xl bg-green-50 px-4 py-3"
-                      >
                         <div>
-                          <p className="font-medium text-gray-900">
-                            {item.name}
-                          </p>
+                          <h3 className="font-semibold text-gray-900">
+                            Next Order Action
+                          </h3>
 
-                          <p className="text-sm text-gray-500">
-                            {item.quantity} × ₹{item.price}
+                          <p className="mt-1 text-sm text-gray-500">
+                            Move this order to the next stage.
                           </p>
                         </div>
 
-                        <p className="font-semibold text-gray-900">
-                          ₹{item.subtotal}
+                        <button
+                          onClick={() =>
+                            updateOrderStatus(
+                              order.id,
+                              quickAction.nextStatus
+                            )
+                          }
+                          disabled={
+                            updatingOrderId === order.id
+                          }
+                          className="rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {updatingOrderId === order.id
+                            ? 'Updating...'
+                            : quickAction.label}
+                        </button>
+
+                      </div>
+
+                    </div>
+                  )}
+
+                  {/* Status Dropdown */}
+                  <div className="border-b border-gray-100 bg-gray-50 px-5 py-5">
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          Update Order Status
+                        </h3>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                          Or select a status manually.
                         </p>
                       </div>
-                    ))}
-                  </div>
-                </div>
 
-                {order.instructions && (
+                      <select
+                        value={order.orderStatus}
+                        onChange={(event) =>
+                          updateOrderStatus(
+                            order.id,
+                            event.target.value
+                          )
+                        }
+                        disabled={
+                          updatingOrderId === order.id
+                        }
+                        className="w-full rounded-xl border border-green-200 bg-white px-4 py-3 text-sm font-semibold capitalize text-gray-900 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-64"
+                      >
+                        <option value="pending">
+                          Pending
+                        </option>
+
+                        <option value="confirmed">
+                          Confirmed
+                        </option>
+
+                        <option value="preparing">
+                          Preparing
+                        </option>
+
+                        <option value="out_for_delivery">
+                          Out for Delivery
+                        </option>
+
+                        <option value="completed">
+                          Completed
+                        </option>
+
+                        <option value="cancelled">
+                          Cancelled
+                        </option>
+                      </select>
+
+                    </div>
+
+                    {updatingOrderId === order.id && (
+                      <p className="mt-2 text-right text-xs font-medium text-green-700">
+                        Updating status...
+                      </p>
+                    )}
+
+                    {order.updatedAt !== order.createdAt && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Last updated:{' '}
+                        {formatDate(order.updatedAt)}
+                      </p>
+                    )}
+
+                  </div>
+
+                  {/* Customer / Delivery / Payment */}
+                  <div className="grid gap-6 p-5 lg:grid-cols-3">
+
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        Customer
+                      </h3>
+
+                      <p className="mt-2 text-gray-700">
+                        {order.customer.name}
+                      </p>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        {order.customer.phone}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        Delivery
+                      </h3>
+
+                      <p className="mt-2 capitalize text-gray-700">
+                        {order.deliveryType}
+                      </p>
+
+                      {order.address && (
+                        <p className="mt-1 text-sm text-gray-500">
+                          {order.address}
+                        </p>
+                      )}
+
+                      {order.landmark && (
+                        <p className="mt-1 text-sm text-gray-500">
+                          Landmark: {order.landmark}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        Payment
+                      </h3>
+
+                      <p className="mt-2 capitalize text-gray-700">
+                        {order.paymentMethod}
+                      </p>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        Status: {order.paymentStatus}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Items */}
                   <div className="border-t border-gray-100 px-5 py-5">
+
                     <h3 className="font-semibold text-gray-900">
-                      Customer Instructions
+                      Items
                     </h3>
 
-                    <p className="mt-2 text-sm text-gray-600">
-                      {order.instructions}
-                    </p>
+                    <div className="mt-4 space-y-3">
+
+                      {order.items.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between rounded-xl bg-green-50 px-4 py-3"
+                        >
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {item.name}
+                            </p>
+
+                            <p className="text-sm text-gray-500">
+                              {item.quantity} × ₹{item.price}
+                            </p>
+                          </div>
+
+                          <p className="font-semibold text-gray-900">
+                            ₹{item.subtotal}
+                          </p>
+                        </div>
+                      ))}
+
+                    </div>
+
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {/* Instructions */}
+                  {order.instructions && (
+                    <div className="border-t border-gray-100 px-5 py-5">
+
+                      <h3 className="font-semibold text-gray-900">
+                        Customer Instructions
+                      </h3>
+
+                      <p className="mt-2 text-sm text-gray-600">
+                        {order.instructions}
+                      </p>
+
+                    </div>
+                  )}
+
+                </div>
+              )
+            })}
+
           </div>
         )}
+
       </main>
     </div>
   )
