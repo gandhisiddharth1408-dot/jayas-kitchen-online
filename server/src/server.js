@@ -10,9 +10,26 @@ const app = express()
 
 const PORT = process.env.PORT || 5001
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,
+].filter(Boolean)
+
 app.use(
   cors({
-    origin: 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Allow requests without an origin
+      // such as Postman or server-to-server requests
+      if (!origin) {
+        return callback(null, true)
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true)
+      }
+
+      return callback(new Error('Not allowed by CORS'))
+    },
   })
 )
 
@@ -47,5 +64,5 @@ app.get('/api/db-test', async (req, res) => {
 app.use('/api/orders', ordersRouter)
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
+  console.log(`Server running on port ${PORT}`)
 })
