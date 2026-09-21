@@ -72,8 +72,14 @@ function CustomerDashboard() {
 
   const [addressForm, setAddressForm] =
     useState({
-      address: '',
+      houseNumber: '',
+      street: '',
+      addressLine2: '',
       landmark: '',
+      city: 'Vadodara',
+      state: 'Gujarat',
+      pincode: '',
+      addressType: 'Home',
     })
 
   const [isSavingAddress, setIsSavingAddress] =
@@ -346,10 +352,6 @@ function CustomerDashboard() {
           .trim()
           .toLowerCase()
 
-      // -------------------------------
-      // FRONTEND VALIDATION
-      // -------------------------------
-
       if (!cleanName) {
         setProfileMessage(
           'Please enter your full name.'
@@ -398,10 +400,6 @@ function CustomerDashboard() {
         return
       }
 
-      // -------------------------------
-      // UPDATE PROFILE
-      // -------------------------------
-
       const response =
         await fetch(
           `${API_URL}/api/otp/me`,
@@ -427,10 +425,6 @@ function CustomerDashboard() {
       const data =
         await response.json()
 
-      // -------------------------------
-      // AUTH ERROR
-      // -------------------------------
-
       if (
         response.status === 401 ||
         response.status === 404
@@ -449,10 +443,6 @@ function CustomerDashboard() {
         return
       }
 
-      // -------------------------------
-      // OTHER ERROR
-      // -------------------------------
-
       if (!response.ok) {
         throw new Error(
           data.message ||
@@ -460,20 +450,12 @@ function CustomerDashboard() {
         )
       }
 
-      // -------------------------------
-      // SAVE NEW JWT
-      // -------------------------------
-
       if (data.token) {
         localStorage.setItem(
           'customerToken',
           data.token
         )
       }
-
-      // -------------------------------
-      // SAVE CUSTOMER DATA
-      // -------------------------------
 
       if (data.customer) {
         setCustomer(
@@ -530,8 +512,40 @@ function CustomerDashboard() {
     }
 
     setAddressForm({
-      address: customer.address || '',
-      landmark: customer.landmark || '',
+      houseNumber:
+        customer.house_number ||
+        customer.houseNumber ||
+        '',
+
+      street:
+        customer.street ||
+        '',
+
+      addressLine2:
+        customer.address_line2 ||
+        customer.addressLine2 ||
+        '',
+
+      landmark:
+        customer.landmark ||
+        '',
+
+      city:
+        customer.city ||
+        'Vadodara',
+
+      state:
+        customer.state ||
+        'Gujarat',
+
+      pincode:
+        customer.pincode ||
+        '',
+
+      addressType:
+        customer.address_type ||
+        customer.addressType ||
+        'Home',
     })
 
     setAddressMessage('')
@@ -569,7 +583,15 @@ function CustomerDashboard() {
     setAddressForm(
       (previous) => ({
         ...previous,
-        [name]: value,
+        [name]:
+          name === 'pincode'
+            ? value
+                .replace(
+                  /\D/g,
+                  ''
+                )
+                .slice(0, 6)
+            : value,
       })
     )
 
@@ -603,19 +625,37 @@ function CustomerDashboard() {
     setAddressMessageType('')
 
     try {
-      const cleanAddress =
-        addressForm.address.trim()
+      const cleanHouseNumber =
+        addressForm.houseNumber.trim()
+
+      const cleanStreet =
+        addressForm.street.trim()
+
+      const cleanAddressLine2 =
+        addressForm.addressLine2.trim()
 
       const cleanLandmark =
         addressForm.landmark.trim()
 
+      const cleanCity =
+        addressForm.city.trim()
+
+      const cleanState =
+        addressForm.state.trim()
+
+      const cleanPincode =
+        addressForm.pincode.trim()
+
+      const cleanAddressType =
+        addressForm.addressType.trim()
+
       // -------------------------------
-      // FRONTEND VALIDATION
+      // REQUIRED FIELD VALIDATION
       // -------------------------------
 
-      if (!cleanAddress) {
+      if (!cleanHouseNumber) {
         setAddressMessage(
-          'Please enter your delivery address.'
+          'Please enter your house, flat or building number.'
         )
 
         setAddressMessageType(
@@ -626,9 +666,9 @@ function CustomerDashboard() {
         return
       }
 
-      if (cleanAddress.length > 500) {
+      if (!cleanStreet) {
         setAddressMessage(
-          'Address must be 500 characters or less.'
+          'Please enter your street, area or society.'
         )
 
         setAddressMessageType(
@@ -639,9 +679,137 @@ function CustomerDashboard() {
         return
       }
 
-      if (cleanLandmark.length > 255) {
+      if (!cleanCity) {
+        setAddressMessage(
+          'Please enter your city.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      if (!cleanState) {
+        setAddressMessage(
+          'Please enter your state.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      if (
+        !/^[0-9]{6}$/.test(
+          cleanPincode
+        )
+      ) {
+        setAddressMessage(
+          'Please enter a valid 6-digit pincode.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      // -------------------------------
+      // LENGTH VALIDATION
+      // -------------------------------
+
+      if (
+        cleanHouseNumber.length >
+        100
+      ) {
+        setAddressMessage(
+          'House / Flat / Building number must be 100 characters or less.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      if (
+        cleanStreet.length >
+        255
+      ) {
+        setAddressMessage(
+          'Street / Area / Society must be 255 characters or less.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      if (
+        cleanAddressLine2.length >
+        255
+      ) {
+        setAddressMessage(
+          'Address Line 2 must be 255 characters or less.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      if (
+        cleanLandmark.length >
+        255
+      ) {
         setAddressMessage(
           'Landmark must be 255 characters or less.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      // -------------------------------
+      // COMBINE ADDRESS
+      // -------------------------------
+
+      const addressParts = [
+        cleanHouseNumber,
+        cleanStreet,
+        cleanAddressLine2,
+        `${cleanCity}, ${cleanState} - ${cleanPincode}`,
+      ].filter(Boolean)
+
+      const combinedAddress =
+        addressParts.join(', ')
+
+      if (
+        combinedAddress.length >
+        500
+      ) {
+        setAddressMessage(
+          'The complete address must be 500 characters or less.'
         )
 
         setAddressMessageType(
@@ -672,9 +840,31 @@ function CustomerDashboard() {
 
             body: JSON.stringify({
               address:
-                cleanAddress,
+                combinedAddress,
+
+              houseNumber:
+                cleanHouseNumber,
+
+              street:
+                cleanStreet,
+
+              addressLine2:
+                cleanAddressLine2,
+
               landmark:
                 cleanLandmark,
+
+              city:
+                cleanCity,
+
+              state:
+                cleanState,
+
+              pincode:
+                cleanPincode,
+
+              addressType:
+                cleanAddressType,
             }),
           }
         )
@@ -740,6 +930,39 @@ function CustomerDashboard() {
           JSON.stringify(
             data.customer
           )
+        )
+      } else {
+        setCustomer(
+          (previous) => ({
+            ...previous,
+
+            address:
+              combinedAddress,
+
+            house_number:
+              cleanHouseNumber,
+
+            street:
+              cleanStreet,
+
+            address_line2:
+              cleanAddressLine2,
+
+            landmark:
+              cleanLandmark,
+
+            city:
+              cleanCity,
+
+            state:
+              cleanState,
+
+            pincode:
+              cleanPincode,
+
+            address_type:
+              cleanAddressType,
+          })
         )
       }
 
@@ -839,6 +1062,7 @@ function CustomerDashboard() {
 
   return (
     <div className="min-h-screen bg-[#f8f5ec] px-4 py-8 sm:px-6 lg:px-8">
+
       <div className="mx-auto max-w-6xl">
 
         {/* Header */}
@@ -871,6 +1095,7 @@ function CustomerDashboard() {
           >
             Logout
           </button>
+
         </div>
 
         {/* Quick Actions */}
@@ -981,6 +1206,7 @@ function CustomerDashboard() {
                 Loading account...
               </p>
             )}
+
           </div>
 
         </div>
@@ -1021,26 +1247,85 @@ function CustomerDashboard() {
 
               <div className="flex items-start gap-4">
 
+                {/* Location Icon */}
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
                   📍
                 </div>
 
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
 
-                  <p className="font-semibold text-gray-900">
-                    Delivery Address
-                  </p>
+                  {/* Address Type */}
+                  <div className="flex flex-wrap items-center gap-2">
 
-                  <p className="mt-1 break-words text-sm leading-6 text-gray-700">
-                    {customer.address}
-                  </p>
+                    <p className="font-semibold text-gray-900">
+                      {customer.address_type ||
+                        customer.addressType ||
+                        'Home'}
+                    </p>
 
+                    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
+                      Delivery Address
+                    </span>
+
+                  </div>
+
+                  {/* House / Flat */}
+                  {(customer.house_number ||
+                    customer.houseNumber) && (
+                    <p className="mt-3 text-sm font-semibold text-gray-900">
+                      {customer.house_number ||
+                        customer.houseNumber}
+                    </p>
+                  )}
+
+                  {/* Street */}
+                  {customer.street && (
+                    <p className="mt-1 break-words text-sm leading-6 text-gray-700">
+                      {customer.street}
+                    </p>
+                  )}
+
+                  {/* Address Line 2 */}
+                  {(customer.address_line2 ||
+                    customer.addressLine2) && (
+                    <p className="break-words text-sm leading-6 text-gray-700">
+                      {customer.address_line2 ||
+                        customer.addressLine2}
+                    </p>
+                  )}
+
+                  {/* City / State / Pincode */}
+                  {(customer.city ||
+                    customer.state ||
+                    customer.pincode) && (
+                    <p className="mt-1 text-sm leading-6 text-gray-700">
+
+                      {customer.city &&
+                        customer.city}
+
+                      {customer.city &&
+                        customer.state &&
+                        ', '}
+
+                      {customer.state &&
+                        customer.state}
+
+                      {customer.pincode &&
+                        ` - ${customer.pincode}`}
+
+                    </p>
+                  )}
+
+                  {/* Landmark */}
                   {customer.landmark && (
-                    <p className="mt-2 text-sm text-gray-600">
+                    <p className="mt-3 text-sm text-gray-600">
+
                       <span className="font-medium text-gray-800">
                         Landmark:
                       </span>{' '}
+
                       {customer.landmark}
+
                     </p>
                   )}
 
@@ -1107,6 +1392,7 @@ function CustomerDashboard() {
                 View all orders →
               </button>
             )}
+
           </div>
 
           {isLoading ? (
@@ -1143,6 +1429,7 @@ function CustomerDashboard() {
               >
                 Browse Menu
               </button>
+
             </div>
           ) : (
             <div>
@@ -1210,6 +1497,7 @@ function CustomerDashboard() {
                 <>
                   {/* Status Tracker */}
                   <div className="overflow-x-auto pb-4">
+
                     <div className="flex min-w-[700px] items-start">
 
                       {statusSteps.map(
@@ -1283,6 +1571,7 @@ function CustomerDashboard() {
                       )}
 
                     </div>
+
                   </div>
 
                   {/* Items */}
@@ -1332,11 +1621,14 @@ function CustomerDashboard() {
                       )}
 
                     </div>
+
                   </div>
                 </>
               )}
+
             </div>
           )}
+
         </div>
 
         {/* Footer */}
@@ -1356,7 +1648,6 @@ function CustomerDashboard() {
 
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
 
-            {/* Modal Header */}
             <div className="mb-6 flex items-start justify-between gap-4">
 
               <div>
@@ -1384,14 +1675,12 @@ function CustomerDashboard() {
 
             </div>
 
-            {/* Profile Form */}
             <form
               onSubmit={
                 handleSaveProfile
               }
             >
 
-              {/* Name */}
               <div className="mb-4">
 
                 <label
@@ -1422,7 +1711,6 @@ function CustomerDashboard() {
 
               </div>
 
-              {/* Mobile */}
               <div className="mb-4">
 
                 <label
@@ -1454,7 +1742,6 @@ function CustomerDashboard() {
 
               </div>
 
-              {/* Email */}
               <div className="mb-5">
 
                 <label
@@ -1480,7 +1767,6 @@ function CustomerDashboard() {
 
               </div>
 
-              {/* Message */}
               {profileMessage && (
                 <div
                   className={`mb-5 rounded-xl px-4 py-3 text-sm ${
@@ -1494,7 +1780,6 @@ function CustomerDashboard() {
                 </div>
               )}
 
-              {/* Buttons */}
               <div className="flex gap-3">
 
                 <button
@@ -1537,9 +1822,9 @@ function CustomerDashboard() {
       {isEditingAddress && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6">
 
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
 
-            {/* Modal Header */}
+            {/* Header */}
             <div className="mb-6 flex items-start justify-between gap-4">
 
               <div>
@@ -1550,7 +1835,7 @@ function CustomerDashboard() {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Save your delivery address for faster checkout.
+                  Add your complete delivery address.
                 </p>
               </div>
 
@@ -1562,7 +1847,7 @@ function CustomerDashboard() {
                 disabled={
                   isSavingAddress
                 }
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-lg text-gray-500 transition hover:bg-gray-200 disabled:opacity-50"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-lg text-gray-500 transition hover:bg-gray-200 disabled:opacity-50"
               >
                 ×
               </button>
@@ -1576,53 +1861,213 @@ function CustomerDashboard() {
               }
             >
 
-              {/* Address */}
+              {/* House / Flat */}
               <div className="mb-4">
 
                 <label
-                  htmlFor="customer-address"
+                  htmlFor="customer-house-number"
                   className="mb-1.5 block text-sm font-medium text-gray-700"
                 >
-                  Delivery Address
+                  House / Flat / Building No.
                   <span className="ml-1 text-red-500">
                     *
                   </span>
                 </label>
 
-                <textarea
-                  id="customer-address"
-                  name="address"
+                <input
+                  id="customer-house-number"
+                  name="houseNumber"
+                  type="text"
                   value={
-                    addressForm.address
+                    addressForm.houseNumber
                   }
                   onChange={
                     handleAddressChange
                   }
-                  placeholder="Enter your complete delivery address"
-                  maxLength="500"
-                  rows="4"
+                  placeholder="e.g. Flat 204, House No. 12"
+                  maxLength="100"
                   required
-                  className="w-full resize-none rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
                 />
 
-                <p className="mt-1 text-right text-xs text-gray-400">
-                  {
-                    addressForm.address
-                      .length
+              </div>
+
+              {/* Street / Area */}
+              <div className="mb-4">
+
+                <label
+                  htmlFor="customer-street"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Street / Area / Society
+                  <span className="ml-1 text-red-500">
+                    *
+                  </span>
+                </label>
+
+                <input
+                  id="customer-street"
+                  name="street"
+                  type="text"
+                  value={
+                    addressForm.street
                   }
-                  /500
-                </p>
+                  onChange={
+                    handleAddressChange
+                  }
+                  placeholder="e.g. Shree Residency, Manjalpur"
+                  maxLength="255"
+                  required
+                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
+
+              </div>
+
+              {/* Address Line 2 */}
+              <div className="mb-4">
+
+                <label
+                  htmlFor="customer-address-line-2"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Address Line 2
+
+                  <span className="ml-2 text-xs font-normal text-gray-400">
+                    Optional
+                  </span>
+                </label>
+
+                <input
+                  id="customer-address-line-2"
+                  name="addressLine2"
+                  type="text"
+                  value={
+                    addressForm.addressLine2
+                  }
+                  onChange={
+                    handleAddressChange
+                  }
+                  placeholder="Apartment, floor, block, etc."
+                  maxLength="255"
+                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
+
+              </div>
+
+              {/* City + State */}
+              <div className="mb-4 grid gap-4 sm:grid-cols-2">
+
+                {/* City */}
+                <div>
+
+                  <label
+                    htmlFor="customer-city"
+                    className="mb-1.5 block text-sm font-medium text-gray-700"
+                  >
+                    City
+
+                    <span className="ml-1 text-red-500">
+                      *
+                    </span>
+                  </label>
+
+                  <input
+                    id="customer-city"
+                    name="city"
+                    type="text"
+                    value={
+                      addressForm.city
+                    }
+                    onChange={
+                      handleAddressChange
+                    }
+                    placeholder="Vadodara"
+                    maxLength="100"
+                    required
+                    className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                  />
+
+                </div>
+
+                {/* State */}
+                <div>
+
+                  <label
+                    htmlFor="customer-state"
+                    className="mb-1.5 block text-sm font-medium text-gray-700"
+                  >
+                    State
+
+                    <span className="ml-1 text-red-500">
+                      *
+                    </span>
+                  </label>
+
+                  <input
+                    id="customer-state"
+                    name="state"
+                    type="text"
+                    value={
+                      addressForm.state
+                    }
+                    onChange={
+                      handleAddressChange
+                    }
+                    placeholder="Gujarat"
+                    maxLength="100"
+                    required
+                    className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                  />
+
+                </div>
+
+              </div>
+
+              {/* Pincode */}
+              <div className="mb-4">
+
+                <label
+                  htmlFor="customer-pincode"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Pincode
+
+                  <span className="ml-1 text-red-500">
+                    *
+                  </span>
+                </label>
+
+                <input
+                  id="customer-pincode"
+                  name="pincode"
+                  type="text"
+                  inputMode="numeric"
+                  value={
+                    addressForm.pincode
+                  }
+                  onChange={
+                    handleAddressChange
+                  }
+                  placeholder="Enter 6-digit pincode"
+                  maxLength="6"
+                  required
+                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
 
               </div>
 
               {/* Landmark */}
-              <div className="mb-5">
+              <div className="mb-4">
 
                 <label
                   htmlFor="customer-landmark"
                   className="mb-1.5 block text-sm font-medium text-gray-700"
                 >
                   Landmark
+
+                  <span className="ml-2 text-xs font-normal text-gray-400">
+                    Optional
+                  </span>
                 </label>
 
                 <input
@@ -1639,6 +2084,42 @@ function CustomerDashboard() {
                   maxLength="255"
                   className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
                 />
+
+              </div>
+
+              {/* Address Type */}
+              <div className="mb-5">
+
+                <label
+                  htmlFor="customer-address-type"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Address Type
+                </label>
+
+                <select
+                  id="customer-address-type"
+                  name="addressType"
+                  value={
+                    addressForm.addressType
+                  }
+                  onChange={
+                    handleAddressChange
+                  }
+                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                >
+                  <option value="Home">
+                    Home
+                  </option>
+
+                  <option value="Work">
+                    Work
+                  </option>
+
+                  <option value="Other">
+                    Other
+                  </option>
+                </select>
 
               </div>
 
