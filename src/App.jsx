@@ -3,11 +3,15 @@ import Navbar from './components/Navbar'
 import Menu from './components/Menu'
 import Cart from './components/Cart'
 import Checkout from './components/Checkout'
+import Footer from './components/Footer'
 import AdminDashboard from './components/AdminDashboard'
 import AdminOrders from './components/AdminOrders'
 import AdminMenu from './components/AdminMenu'
 import AdminCustomers from './components/AdminCustomers'
 import AdminLogin from './components/AdminLogin'
+import PrivacyPolicy from './components/PrivacyPolicy'
+import TermsConditions from './components/TermsConditions'
+import RefundCancellation from './components/RefundCancellation'
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -217,6 +221,17 @@ function App() {
   const isAdminPage =
     window.location.pathname === '/admin'
 
+  const isPrivacyPolicyPage =
+    window.location.pathname ===
+    '/privacy-policy'
+
+  const isTermsPage =
+    window.location.pathname === '/terms'
+
+  const isRefundCancellationPage =
+    window.location.pathname ===
+    '/refund-cancellation'
+
   const [
     isAdminLoggedIn,
     setIsAdminLoggedIn,
@@ -306,6 +321,18 @@ function App() {
     )
 
     setIsAdminLoggedIn(false)
+  }
+
+  if (isPrivacyPolicyPage) {
+    return <PrivacyPolicy />
+  }
+
+  if (isTermsPage) {
+    return <TermsConditions />
+  }
+
+  if (isRefundCancellationPage) {
+    return <RefundCancellation />
   }
 
   if (isAdminPage && isCheckingAdminAuth) {
@@ -501,6 +528,8 @@ function App() {
           onUpdateQuantity={updateMenuQuantity}
         />
       </main>
+
+      <Footer />
 
       <button
         onClick={() =>
