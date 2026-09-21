@@ -4,6 +4,8 @@ import dotenv from 'dotenv'
 import pool from './config/db.js'
 import ordersRouter from './routes/orders.js'
 import adminRouter from './routes/admin.js'
+import authRouter from './routes/auth.js'
+import otpRouter from './routes/otp.js'
 
 dotenv.config()
 
@@ -31,7 +33,9 @@ app.use(
         return callback(null, true)
       }
 
-      return callback(new Error('Not allowed by CORS'))
+      return callback(
+        new Error('Not allowed by CORS')
+      )
     },
   })
 )
@@ -64,18 +68,30 @@ app.get('/api/db-test', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'PostgreSQL connection is working',
-      databaseTime: result.rows[0].current_time,
+      message:
+        'PostgreSQL connection is working',
+      databaseTime:
+        result.rows[0].current_time,
     })
   } catch (error) {
-    console.error('Database test failed:', error)
+    console.error(
+      'Database test failed:',
+      error
+    )
 
     res.status(500).json({
       success: false,
-      message: 'PostgreSQL connection failed',
+      message:
+        'PostgreSQL connection failed',
     })
   }
 })
+
+// Customer authentication APIs
+app.use('/api/auth', authRouter)
+
+// Customer OTP APIs
+app.use('/api/otp', otpRouter)
 
 // Customer + order APIs
 app.use('/api/orders', ordersRouter)
@@ -85,17 +101,23 @@ app.use('/api/admin', adminRouter)
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
+  console.log(
+    `Server running on port ${PORT}`
+  )
 
   console.log(
     `Admin username configured: ${
-      process.env.ADMIN_USERNAME ? 'YES' : 'NO'
+      process.env.ADMIN_USERNAME
+        ? 'YES'
+        : 'NO'
     }`
   )
 
   console.log(
     `Admin password configured: ${
-      process.env.ADMIN_PASSWORD ? 'YES' : 'NO'
+      process.env.ADMIN_PASSWORD
+        ? 'YES'
+        : 'NO'
     }`
   )
 })

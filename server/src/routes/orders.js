@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import pool from '../config/db.js'
 import razorpay from '../config/razorpay.js'
 import adminAuth from '../middleware/adminAuth.js'
+import customerAuth from '../middleware/customerAuth.js'
 
 const router = express.Router()
 
@@ -231,7 +232,6 @@ async function calculateCart(
       )
     }
 
-    // Prevent unreasonable quantities.
     if (quantity > 100) {
       throw new Error(
         `Maximum quantity for ${menuItem.name} is 100`
@@ -316,6 +316,321 @@ router.get(
         success: false,
         message:
           'Failed to fetch menu',
+      })
+    }
+  }
+)
+
+// ==================================================
+// CUSTOMER ORDERS
+// ==================================================
+
+// GET logged-in customer's orders
+router.get(
+  '/my-orders',
+  customerAuth,
+  async (req, res) => {
+    try {
+      const customerId =
+        req.customer?.customerId
+
+      if (
+        !customerId ||
+        !Number.isInteger(
+          Number(customerId)
+        )
+      ) {
+        return res.status(401).json({
+          success: false,
+          message:
+            'Invalid customer authentication.',
+        })
+      }
+
+      const result =
+        await pool.query(
+          `
+          SELECT
+            o.id,
+            o.delivery_type,
+            o.payment_method,
+            o.payment_status,
+            o.order_status,
+            o.subtotal,
+            o.delivery_charge,
+            o.total,
+            o.created_at,
+            o.updated_at,
+
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT(
+                  'id', oi.id,
+                  'name', oi.item_name,
+                  'price', oi.price,
+                  'quantity', oi.quantity,
+                  'subtotal', oi.subtotal
+                )
+                ORDER BY oi.id
+              )
+              FILTER (
+                WHERE oi.id IS NOT NULL
+              ),
+              '[]'
+            ) AS items
+
+          FROM orders o
+
+          LEFT JOIN order_items oi
+            ON oi.order_id =
+              o.id
+
+          WHERE o.customer_id = $1
+
+          GROUP BY
+            o.id
+
+          ORDER BY
+            o.created_at DESC
+          `,
+          [Number(customerId)]
+        )
+
+      const orders =
+        result.rows.map(
+          (order) => ({
+            id:
+              order.id,
+
+            deliveryType:
+              order.delivery_type,
+
+            paymentMethod:
+              order.payment_method,
+
+            paymentStatus:
+              order.payment_status,
+
+            orderStatus:
+              order.order_status,
+
+            subtotal:
+              Number(
+                order.subtotal
+              ),
+
+            deliveryCharge:
+              Number(
+                order.delivery_charge
+              ),
+
+            total:
+              Number(
+                order.total
+              ),
+
+            createdAt:
+              order.created_at,
+
+            updatedAt:
+              order.updated_at,
+
+            items:
+              order.items.map(
+                (item) => ({
+                  id:
+                    item.id,
+
+                  name:
+                    item.name,
+
+                  price:
+                    Number(
+                      item.price
+                    ),
+
+                  quantity:
+                    item.quantity,
+
+                  subtotal:
+                    Number(
+                      item.subtotal
+                    ),
+                })
+              ),
+          })
+        )
+
+      res.json({
+        success: true,
+        orders,
+      })
+    } catch (error) {
+      console.error(
+        'Authenticated customer orders fetch failed:',
+        error
+      )
+
+      res.status(500).json({
+        success: false,
+        message:
+          'Failed to fetch your orders',
+      })
+    }
+  }
+)
+
+// GET customer's orders by phone number
+router.get(
+  '/my-orders/:phone',
+  async (req, res) => {
+    try {
+      const phone = String(
+        req.params.phone || ''
+      ).trim()
+
+      if (
+        !/^[0-9]{10}$/.test(phone)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Please provide a valid 10-digit mobile number',
+        })
+      }
+
+      const result =
+        await pool.query(
+          `
+          SELECT
+            o.id,
+            o.delivery_type,
+            o.payment_method,
+            o.payment_status,
+            o.order_status,
+            o.subtotal,
+            o.delivery_charge,
+            o.total,
+            o.created_at,
+            o.updated_at,
+
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT(
+                  'id', oi.id,
+                  'name', oi.item_name,
+                  'price', oi.price,
+                  'quantity', oi.quantity,
+                  'subtotal', oi.subtotal
+                )
+                ORDER BY oi.id
+              )
+              FILTER (
+                WHERE oi.id IS NOT NULL
+              ),
+              '[]'
+            ) AS items
+
+          FROM orders o
+
+          INNER JOIN customers c
+            ON c.id =
+              o.customer_id
+
+          LEFT JOIN order_items oi
+            ON oi.order_id =
+              o.id
+
+          WHERE c.phone = $1
+
+          GROUP BY
+            o.id
+
+          ORDER BY
+            o.created_at DESC
+          `,
+          [phone]
+        )
+
+      const orders =
+        result.rows.map(
+          (order) => ({
+            id:
+              order.id,
+
+            deliveryType:
+              order.delivery_type,
+
+            paymentMethod:
+              order.payment_method,
+
+            paymentStatus:
+              order.payment_status,
+
+            orderStatus:
+              order.order_status,
+
+            subtotal:
+              Number(
+                order.subtotal
+              ),
+
+            deliveryCharge:
+              Number(
+                order.delivery_charge
+              ),
+
+            total:
+              Number(
+                order.total
+              ),
+
+            createdAt:
+              order.created_at,
+
+            updatedAt:
+              order.updated_at,
+
+            items:
+              order.items.map(
+                (item) => ({
+                  id:
+                    item.id,
+
+                  name:
+                    item.name,
+
+                  price:
+                    Number(
+                      item.price
+                    ),
+
+                  quantity:
+                    item.quantity,
+
+                  subtotal:
+                    Number(
+                      item.subtotal
+                    ),
+                })
+              ),
+          })
+        )
+
+      res.json({
+        success: true,
+        orders,
+      })
+    } catch (error) {
+      console.error(
+        'Customer orders fetch failed:',
+        error
+      )
+
+      res.status(500).json({
+        success: false,
+        message:
+          'Failed to fetch customer orders',
       })
     }
   }
@@ -651,16 +966,13 @@ router.delete(
 
 router.post(
   '/payment/create-order',
+  customerAuth,
   async (req, res) => {
     try {
       const {
         items,
         deliveryType,
       } = req.body
-
-      // ------------------------------------------------
-      // CHECK RAZORPAY CONFIGURATION
-      // ------------------------------------------------
 
       if (
         !process.env
@@ -678,10 +990,6 @@ router.post(
             'Online payment is currently unavailable',
         })
       }
-
-      // ------------------------------------------------
-      // CALCULATE CART FROM DATABASE
-      // ------------------------------------------------
 
       const calculated =
         await calculateCart(
@@ -708,16 +1016,6 @@ router.post(
         })
       }
 
-      // ------------------------------------------------
-      // CREATE RAZORPAY ORDER
-      // ------------------------------------------------
-
-      /*
-       * Generate a short, unique receipt.
-       *
-       * Timestamp + random bytes prevents
-       * collisions better than Date.now() alone.
-       */
       const receipt =
         `jk_${Date.now()}_${crypto
           .randomBytes(4)
@@ -741,10 +1039,6 @@ router.post(
         )
       }
 
-      // ------------------------------------------------
-      // VERIFY RAZORPAY RESPONSE
-      // ------------------------------------------------
-
       if (
         Number(
           razorpayOrder.amount
@@ -756,10 +1050,6 @@ router.post(
           'Razorpay returned an unexpected order amount'
         )
       }
-
-      // ------------------------------------------------
-      // RESPONSE
-      // ------------------------------------------------
 
       res.status(201).json({
         success: true,
@@ -776,8 +1066,6 @@ router.post(
           currency:
             razorpayOrder.currency,
 
-          // Safe to send to frontend.
-          // NEVER send RAZORPAY_KEY_SECRET.
           keyId:
             process.env
               .RAZORPAY_KEY_ID,
@@ -806,6 +1094,7 @@ router.post(
 
 router.post(
   '/payment/verify',
+  customerAuth,
   async (req, res) => {
     try {
       const {
@@ -813,10 +1102,6 @@ router.post(
         razorpayPaymentId,
         razorpaySignature,
       } = req.body
-
-      // ------------------------------------------------
-      // BASIC VALIDATION
-      // ------------------------------------------------
 
       if (
         !razorpayOrderId ||
@@ -829,10 +1114,6 @@ router.post(
             'Payment verification details are required',
         })
       }
-
-      // ------------------------------------------------
-      // SIGNATURE VERIFICATION
-      // ------------------------------------------------
 
       const isSignatureValid =
         verifyRazorpaySignature(
@@ -850,10 +1131,6 @@ router.post(
             'Payment verification failed',
         })
       }
-
-      // ------------------------------------------------
-      // FETCH TRUSTED RAZORPAY DATA
-      // ------------------------------------------------
 
       const razorpayOrder =
         await razorpay.orders.fetch(
@@ -876,10 +1153,6 @@ router.post(
         })
       }
 
-      // ------------------------------------------------
-      // PAYMENT → ORDER ASSOCIATION
-      // ------------------------------------------------
-
       if (
         razorpayPayment.order_id !==
         razorpayOrderId
@@ -890,10 +1163,6 @@ router.post(
             'Payment does not belong to this Razorpay order',
         })
       }
-
-      // ------------------------------------------------
-      // RAZORPAY ORDER STATUS
-      // ------------------------------------------------
 
       if (
         razorpayOrder.status !==
@@ -908,10 +1177,6 @@ router.post(
         })
       }
 
-      // ------------------------------------------------
-      // CURRENCY VALIDATION
-      // ------------------------------------------------
-
       if (
         razorpayOrder.currency !==
           CURRENCY ||
@@ -925,10 +1190,6 @@ router.post(
         })
       }
 
-      // ------------------------------------------------
-      // CAPTURE VALIDATION
-      // ------------------------------------------------
-
       if (
         razorpayPayment.status !==
         'captured'
@@ -939,10 +1200,6 @@ router.post(
             'Payment has not been captured',
         })
       }
-
-      // ------------------------------------------------
-      // ORDER AMOUNT VALIDATION
-      // ------------------------------------------------
 
       if (
         Number(
@@ -956,10 +1213,6 @@ router.post(
         })
       }
 
-      // ------------------------------------------------
-      // PAYMENT AMOUNT VALIDATION
-      // ------------------------------------------------
-
       if (
         Number(
           razorpayPayment.amount
@@ -971,13 +1224,9 @@ router.post(
         return res.status(400).json({
           success: false,
           message:
-            'Payment amount does not match order amount',
+            'Payment amount does not match Razorpay order amount',
         })
       }
-
-      // ------------------------------------------------
-      // DUPLICATE PAYMENT CHECK
-      // ------------------------------------------------
 
       const existingOrder =
         await pool.query(
@@ -1017,10 +1266,6 @@ router.post(
               .rows[0].id,
         })
       }
-
-      // ------------------------------------------------
-      // SUCCESS
-      // ------------------------------------------------
 
       res.json({
         success: true,
@@ -1071,10 +1316,6 @@ router.post(
   '/payment/webhook',
   async (req, res) => {
     try {
-      // ------------------------------------------------
-      // WEBHOOK SECRET CHECK
-      // ------------------------------------------------
-
       if (
         !process.env
           .RAZORPAY_WEBHOOK_SECRET
@@ -1089,10 +1330,6 @@ router.post(
             'Webhook is not configured',
         })
       }
-
-      // ------------------------------------------------
-      // GET SIGNATURE
-      // ------------------------------------------------
 
       const webhookSignature =
         req.headers[
@@ -1109,10 +1346,6 @@ router.post(
         })
       }
 
-      // ------------------------------------------------
-      // RAW BODY
-      // ------------------------------------------------
-
       const rawBody =
         Buffer.isBuffer(req.body)
           ? req.body
@@ -1121,10 +1354,6 @@ router.post(
                 req.body
               )
             )
-
-      // ------------------------------------------------
-      // VERIFY WEBHOOK SIGNATURE
-      // ------------------------------------------------
 
       const isValid =
         verifyRazorpayWebhookSignature(
@@ -1143,10 +1372,6 @@ router.post(
             'Invalid webhook signature',
         })
       }
-
-      // ------------------------------------------------
-      // PARSE WEBHOOK PAYLOAD
-      // ------------------------------------------------
 
       let payload
 
@@ -1173,19 +1398,11 @@ router.post(
       const event =
         payload?.event
 
-      // ------------------------------------------------
-      // LOG EVENT TYPE
-      // ------------------------------------------------
-
       console.log(
         `Razorpay webhook received: ${
           event || 'unknown'
         }`
       )
-
-      // ------------------------------------------------
-      // PAYMENT CAPTURED
-      // ------------------------------------------------
 
       if (
         event ===
@@ -1209,10 +1426,6 @@ router.post(
         const paymentId =
           payment.id
 
-        // ------------------------------------------------
-        // FIND EXISTING ORDER
-        // ------------------------------------------------
-
         const existingOrder =
           await pool.query(
             `
@@ -1229,10 +1442,6 @@ router.post(
             [paymentId]
           )
 
-        // ------------------------------------------------
-        // ALREADY PROCESSED
-        // ------------------------------------------------
-
         if (
           existingOrder.rows.length >
           0
@@ -1248,23 +1457,6 @@ router.post(
           })
         }
 
-        // ------------------------------------------------
-        // ORDER NOT YET CREATED
-        // ------------------------------------------------
-
-        /*
-         * The current checkout flow creates the
-         * Jaya's Kitchen order after the browser
-         * verifies the Razorpay payment.
-         *
-         * Therefore a webhook can arrive before
-         * our local order exists.
-         *
-         * We acknowledge the webhook safely.
-         * The existing payment verification flow
-         * remains responsible for creating the order.
-         */
-
         console.log(
           `Payment ${paymentId} captured by Razorpay, but no local order exists yet`
         )
@@ -1275,18 +1467,6 @@ router.post(
             'Payment webhook received',
         })
       }
-
-      // ------------------------------------------------
-      // OTHER EVENTS
-      // ------------------------------------------------
-
-      /*
-       * We intentionally acknowledge other valid
-       * Razorpay events for now.
-       *
-       * More event handling can be added later
-       * when required.
-       */
 
       return res.status(200).json({
         success: true,
@@ -1906,8 +2086,10 @@ router.patch(
 // CREATE CASH / FINAL ORDER
 // ==================================================
 
+// Customer must be logged in to place an order
 router.post(
   '/',
+  customerAuth,
   async (req, res) => {
     const client =
       await pool.connect()
@@ -1928,29 +2110,75 @@ router.post(
       } = req.body
 
       // ------------------------------------------------
-      // BASIC VALIDATION
+      // AUTHENTICATED CUSTOMER
       // ------------------------------------------------
 
+      const authenticatedCustomerId =
+        Number(
+          req.customer?.customerId
+        )
+
       if (
-        !customer ||
-        !customer.name ||
-        !customer.phone
+        !Number.isInteger(
+          authenticatedCustomerId
+        ) ||
+        authenticatedCustomerId <= 0
       ) {
-        return res.status(400).json({
+        return res.status(401).json({
           success: false,
           message:
-            'Customer name and phone are required',
+            'Invalid customer authentication.',
         })
       }
 
+      // ------------------------------------------------
+      // FETCH CUSTOMER FROM DATABASE
+      // ------------------------------------------------
+
+      const authenticatedCustomerResult =
+        await client.query(
+          `
+          SELECT
+            id,
+            name,
+            phone,
+            email
+          FROM customers
+          WHERE id = $1
+          LIMIT 1
+          `,
+          [authenticatedCustomerId]
+        )
+
+      if (
+        authenticatedCustomerResult
+          .rows.length === 0
+      ) {
+        return res.status(401).json({
+          success: false,
+          message:
+            'Customer account could not be found.',
+        })
+      }
+
+      const authenticatedCustomer =
+        authenticatedCustomerResult
+          .rows[0]
+
+      // ------------------------------------------------
+      // CUSTOMER DETAILS
+      // ------------------------------------------------
+
       const customerName =
         String(
-          customer.name
+          authenticatedCustomer.name ||
+            ''
         ).trim()
 
       const customerPhone =
         String(
-          customer.phone
+          authenticatedCustomer.phone ||
+            ''
         ).trim()
 
       if (
@@ -1960,7 +2188,7 @@ router.post(
         return res.status(400).json({
           success: false,
           message:
-            'Please enter a valid customer name',
+            'Your customer account has an invalid name.',
         })
       }
 
@@ -1972,9 +2200,13 @@ router.post(
         return res.status(400).json({
           success: false,
           message:
-            'Please enter a valid 10-digit mobile number',
+            'Your customer account does not have a valid 10-digit mobile number.',
         })
       }
+
+      // ------------------------------------------------
+      // BASIC ORDER VALIDATION
+      // ------------------------------------------------
 
       if (
         !Array.isArray(items) ||
@@ -2074,7 +2306,6 @@ router.post(
           })
         }
 
-        // Verify signature again.
         const isSignatureValid =
           verifyRazorpaySignature(
             razorpayOrderId,
@@ -2091,10 +2322,6 @@ router.post(
               'Invalid Razorpay payment signature',
           })
         }
-
-        // ------------------------------------------------
-        // DUPLICATE PAYMENT CHECK
-        // ------------------------------------------------
 
         const existingOrder =
           await client.query(
@@ -2125,10 +2352,6 @@ router.post(
           })
         }
 
-        // ------------------------------------------------
-        // FETCH TRUSTED RAZORPAY DATA
-        // ------------------------------------------------
-
         const razorpayOrder =
           await razorpay.orders.fetch(
             razorpayOrderId
@@ -2150,10 +2373,6 @@ router.post(
           })
         }
 
-        // ------------------------------------------------
-        // PAYMENT → ORDER ASSOCIATION
-        // ------------------------------------------------
-
         if (
           razorpayPayment.order_id !==
           razorpayOrderId
@@ -2164,10 +2383,6 @@ router.post(
               'Payment does not belong to this Razorpay order',
           })
         }
-
-        // ------------------------------------------------
-        // RAZORPAY ORDER STATUS
-        // ------------------------------------------------
 
         if (
           razorpayOrder.status !==
@@ -2182,10 +2397,6 @@ router.post(
           })
         }
 
-        // ------------------------------------------------
-        // CURRENCY
-        // ------------------------------------------------
-
         if (
           razorpayOrder.currency !==
             CURRENCY ||
@@ -2199,10 +2410,6 @@ router.post(
           })
         }
 
-        // ------------------------------------------------
-        // CAPTURE STATUS
-        // ------------------------------------------------
-
         if (
           razorpayPayment.status !==
           'captured'
@@ -2213,10 +2420,6 @@ router.post(
               'Razorpay payment has not been captured',
           })
         }
-
-        // ------------------------------------------------
-        // ORDER AMOUNT
-        // ------------------------------------------------
 
         if (
           Number(
@@ -2229,10 +2432,6 @@ router.post(
               'Razorpay order amount does not match the order total',
           })
         }
-
-        // ------------------------------------------------
-        // PAYMENT AMOUNT
-        // ------------------------------------------------
 
         if (
           Number(
@@ -2269,37 +2468,39 @@ router.post(
       // CUSTOMER
       // ------------------------------------------------
 
+      // IMPORTANT:
+      // Use the customer identified by JWT.
+      // Do NOT create/update a customer using
+      // a phone number supplied by the frontend.
+
       const customerResult =
         await client.query(
           `
-          INSERT INTO customers (
-            name,
-            phone,
-            updated_at
-          )
-          VALUES (
-            $1,
-            $2,
-            CURRENT_TIMESTAMP
-          )
-
-          ON CONFLICT (phone)
-          DO UPDATE SET
-            name =
-              EXCLUDED.name,
-            updated_at =
-              CURRENT_TIMESTAMP
-
-          RETURNING
+          SELECT
             id,
             name,
             phone
+          FROM customers
+          WHERE id = $1
+          FOR UPDATE
           `,
-          [
-            customerName,
-            customerPhone,
-          ]
+          [authenticatedCustomerId]
         )
+
+      if (
+        customerResult.rows.length ===
+        0
+      ) {
+        await client.query(
+          'ROLLBACK'
+        )
+
+        return res.status(404).json({
+          success: false,
+          message:
+            'Customer account could not be found.',
+        })
+      }
 
       const customerRecord =
         customerResult.rows[0]

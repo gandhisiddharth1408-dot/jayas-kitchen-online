@@ -7,11 +7,32 @@ function Checkout({
   onBackToCart,
   onPlaceOrder,
 }) {
+  // --------------------------------------------------
+  // GET LOGGED-IN CUSTOMER
+  // --------------------------------------------------
+
+  const savedCustomer =
+    JSON.parse(
+      localStorage.getItem('customer') ||
+        'null'
+    )
+
   const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    address: '',
-    landmark: '',
+    name:
+      savedCustomer?.name || '',
+
+    phone:
+      savedCustomer?.phone || '',
+
+    // Load saved address from customer account.
+    // Customer can still edit these fields
+    // for this particular order.
+    address:
+      savedCustomer?.address || '',
+
+    landmark:
+      savedCustomer?.landmark || '',
+
     instructions: '',
     deliveryType: 'delivery',
     paymentMethod: 'cash',
@@ -59,6 +80,17 @@ function Checkout({
     razorpayPaymentId = null,
     razorpaySignature = null,
   }) => {
+    const token =
+      localStorage.getItem(
+        'customerToken'
+      )
+
+    if (!token) {
+      throw new Error(
+        'Please login to place your order.'
+      )
+    }
+
     const order = {
       customer: {
         name: formData.name.trim(),
@@ -107,6 +139,9 @@ function Checkout({
         headers: {
           'Content-Type':
             'application/json',
+
+          Authorization:
+            `Bearer ${token}`,
         },
 
         body: JSON.stringify(order),
@@ -117,6 +152,22 @@ function Checkout({
       await response.json()
 
     if (!response.ok) {
+      if (
+        response.status === 401
+      ) {
+        localStorage.removeItem(
+          'customerToken'
+        )
+
+        localStorage.removeItem(
+          'customer'
+        )
+
+        throw new Error(
+          'Your session has expired. Please login again.'
+        )
+      }
+
       throw new Error(
         data.message ||
           'Failed to place order'
@@ -136,6 +187,17 @@ function Checkout({
         setIsSubmitting(true)
         setError('')
 
+        const token =
+          localStorage.getItem(
+            'customerToken'
+          )
+
+        if (!token) {
+          throw new Error(
+            'Please login to place your order.'
+          )
+        }
+
         // --------------------------------------------
         // STEP 1
         // Ask backend to create Razorpay order.
@@ -152,6 +214,9 @@ function Checkout({
               headers: {
                 'Content-Type':
                   'application/json',
+
+                Authorization:
+                  `Bearer ${token}`,
               },
 
               body: JSON.stringify({
@@ -173,6 +238,19 @@ function Checkout({
           await createResponse.json()
 
         if (!createResponse.ok) {
+          if (
+            createResponse.status ===
+            401
+          ) {
+            localStorage.removeItem(
+              'customerToken'
+            )
+
+            localStorage.removeItem(
+              'customer'
+            )
+          }
+
           throw new Error(
             createData.message ||
               'Failed to create payment order'
@@ -214,12 +292,6 @@ function Checkout({
         // --------------------------------------------
         // STEP 3
         // Open Razorpay Checkout.
-        //
-        // IMPORTANT:
-        // keyId comes from our backend.
-        //
-        // We NEVER send the Razorpay
-        // Key Secret to the browser.
         // --------------------------------------------
 
         const options = {
@@ -271,6 +343,9 @@ function Checkout({
                       headers: {
                         'Content-Type':
                           'application/json',
+
+                        Authorization:
+                          `Bearer ${token}`,
                       },
 
                       body: JSON.stringify({
@@ -292,6 +367,19 @@ function Checkout({
                 if (
                   !verifyResponse.ok
                 ) {
+                  if (
+                    verifyResponse.status ===
+                    401
+                  ) {
+                    localStorage.removeItem(
+                      'customerToken'
+                    )
+
+                    localStorage.removeItem(
+                      'customer'
+                    )
+                  }
+
                   throw new Error(
                     verifyData.message ||
                       'Payment verification failed'
@@ -300,17 +388,9 @@ function Checkout({
 
                 // ----------------------------------
                 // STEP 5
-                // Save the actual Jaya's Kitchen
-                // order after successful verification.
+                // Save actual order.
                 // ----------------------------------
 
-                /*
-                 * If the payment was already processed,
-                 * don't create another order.
-                 *
-                 * This protects against accidental
-                 * duplicate submissions.
-                 */
                 if (
                   verifyData.alreadyProcessed
                 ) {
@@ -487,8 +567,8 @@ function Checkout({
           </h1>
 
           <p className="mt-2 text-gray-600">
-            Enter your details to place
-            your order.
+            Enter your delivery details
+            to place your order.
           </p>
         </div>
 
@@ -510,47 +590,29 @@ function Checkout({
                 Customer Details
               </h2>
 
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label className="text-sm font-semibold text-gray-700">
-                    Full Name *
-                  </label>
+              <div className="mt-5">
+                <label className="text-sm font-semibold text-gray-700">
+                  Full Name *
+                </label>
 
-                  <input
-                    type="text"
-                    name="name"
-                    value={
-                      formData.name
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    required
-                    placeholder="Enter your name"
-                    className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
-                  />
-                </div>
+                <input
+                  type="text"
+                  name="name"
+                  value={
+                    formData.name
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  required
+                  placeholder="Enter your name"
+                  className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
+                />
 
-                <div>
-                  <label className="text-sm font-semibold text-gray-700">
-                    Mobile Number *
-                  </label>
-
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={
-                      formData.phone
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    required
-                    pattern="[0-9]{10}"
-                    placeholder="10-digit mobile number"
-                    className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
-                  />
-                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Your mobile number is
+                  taken from your account.
+                </p>
               </div>
             </div>
 
@@ -615,9 +677,17 @@ function Checkout({
             {formData.deliveryType ===
               'delivery' && (
               <div className="rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-gray-900">
-                  Delivery Address
-                </h2>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-xl font-bold text-gray-900">
+                    Delivery Address
+                  </h2>
+
+                  {savedCustomer?.address && (
+                    <span className="text-xs font-medium text-green-700">
+                      Saved address loaded
+                    </span>
+                  )}
+                </div>
 
                 <div className="mt-5 space-y-5">
                   <div>
@@ -638,6 +708,16 @@ function Checkout({
                       placeholder="House / Flat, Street, Area"
                       className="mt-2 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
                     />
+
+                    {savedCustomer?.address && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        You can edit this
+                        address for this
+                        order without
+                        changing your saved
+                        address.
+                      </p>
+                    )}
                   </div>
 
                   <div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Navbar from './components/Navbar'
 import Menu from './components/Menu'
+import About from './components/About'
 import Cart from './components/Cart'
 import Checkout from './components/Checkout'
 import Footer from './components/Footer'
@@ -12,6 +13,9 @@ import AdminLogin from './components/AdminLogin'
 import PrivacyPolicy from './components/PrivacyPolicy'
 import TermsConditions from './components/TermsConditions'
 import RefundCancellation from './components/RefundCancellation'
+import MyOrders from './components/MyOrders'
+import CustomerAuth from './components/CustomerAuth'
+import CustomerDashboard from './components/CustomerDashboard'
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -27,6 +31,7 @@ function OrderSuccess({
 
       <main className="flex min-h-[80vh] items-center justify-center px-4 py-16">
         <div className="w-full max-w-lg rounded-3xl border border-green-100 bg-white p-8 text-center shadow-lg sm:p-10">
+
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-4xl">
             ✓
           </div>
@@ -70,6 +75,7 @@ function OrderSuccess({
           >
             Continue Shopping
           </button>
+
         </div>
       </main>
     </div>
@@ -82,8 +88,11 @@ function AdminHome({ onLogout }) {
 
   return (
     <div className="min-h-screen bg-[#FFFDF5]">
+
       <header className="sticky top-0 z-50 border-b border-green-100 bg-white/95 backdrop-blur">
+
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+
           <div>
             <p className="text-sm font-semibold text-green-700">
               Jaya's Kitchen
@@ -95,6 +104,7 @@ function AdminHome({ onLogout }) {
           </div>
 
           <div className="flex items-center gap-2">
+
             <a
               href="/"
               className="rounded-full border border-green-200 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-50"
@@ -108,11 +118,14 @@ function AdminHome({ onLogout }) {
             >
               Logout
             </button>
+
           </div>
         </div>
 
         <div className="border-t border-green-50">
+
           <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-8">
+
             <button
               onClick={() =>
                 setAdminPage('dashboard')
@@ -164,6 +177,7 @@ function AdminHome({ onLogout }) {
             >
               Customers
             </button>
+
           </div>
         </div>
       </header>
@@ -191,6 +205,7 @@ function AdminHome({ onLogout }) {
           onAuthExpired={onLogout}
         />
       )}
+
     </div>
   )
 }
@@ -198,28 +213,49 @@ function AdminHome({ onLogout }) {
 function AdminAuthLoading() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#FFFDF5] px-4">
+
       <div className="text-center">
+
         <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-green-100 border-t-green-700" />
 
         <p className="mt-4 font-semibold text-gray-700">
           Checking admin authentication...
         </p>
+
       </div>
+
     </div>
   )
 }
 
 function App() {
   const [cart, setCart] = useState([])
+
   const [isCartOpen, setIsCartOpen] =
     useState(false)
+
   const [isCheckoutOpen, setIsCheckoutOpen] =
     useState(false)
+
   const [completedOrder, setCompletedOrder] =
     useState(null)
 
+  const [
+    showCustomerAuthPopup,
+    setShowCustomerAuthPopup,
+  ] = useState(false)
+
   const isAdminPage =
     window.location.pathname === '/admin'
+
+  const isMyOrdersPage =
+    window.location.pathname === '/my-orders'
+
+  const isAccountPage =
+    window.location.pathname === '/account'
+
+  const isDashboardPage =
+    window.location.pathname === '/dashboard'
 
   const isPrivacyPolicyPage =
     window.location.pathname ===
@@ -323,21 +359,65 @@ function App() {
     setIsAdminLoggedIn(false)
   }
 
+  // ===============================
+  // PRIVACY POLICY
+  // ===============================
+
   if (isPrivacyPolicyPage) {
     return <PrivacyPolicy />
   }
+
+  // ===============================
+  // TERMS & CONDITIONS
+  // ===============================
 
   if (isTermsPage) {
     return <TermsConditions />
   }
 
+  // ===============================
+  // REFUND & CANCELLATION
+  // ===============================
+
   if (isRefundCancellationPage) {
     return <RefundCancellation />
   }
 
+  // ===============================
+  // CUSTOMER ACCOUNT
+  // ===============================
+
+  if (isAccountPage) {
+    return <CustomerAuth />
+  }
+
+  // ===============================
+  // CUSTOMER DASHBOARD
+  // ===============================
+
+  if (isDashboardPage) {
+    return <CustomerDashboard />
+  }
+
+  // ===============================
+  // CUSTOMER MY ORDERS
+  // ===============================
+
+  if (isMyOrdersPage) {
+    return <MyOrders />
+  }
+
+  // ===============================
+  // ADMIN AUTH CHECK
+  // ===============================
+
   if (isAdminPage && isCheckingAdminAuth) {
     return <AdminAuthLoading />
   }
+
+  // ===============================
+  // ADMIN LOGIN
+  // ===============================
 
   if (isAdminPage && !isAdminLoggedIn) {
     return (
@@ -347,6 +427,10 @@ function App() {
     )
   }
 
+  // ===============================
+  // ADMIN DASHBOARD
+  // ===============================
+
   if (isAdminPage) {
     return (
       <AdminHome
@@ -354,6 +438,10 @@ function App() {
       />
     )
   }
+
+  // ===============================
+  // ADD TO CART
+  // ===============================
 
   const addToCart = (item) => {
     setCart((currentCart) => {
@@ -384,6 +472,10 @@ function App() {
     })
   }
 
+  // ===============================
+  // INCREASE QUANTITY
+  // ===============================
+
   const increaseQuantity = (id) => {
     setCart((currentCart) =>
       currentCart.map((item) =>
@@ -396,6 +488,10 @@ function App() {
       )
     )
   }
+
+  // ===============================
+  // DECREASE QUANTITY
+  // ===============================
 
   const decreaseQuantity = (id) => {
     setCart((currentCart) =>
@@ -414,6 +510,10 @@ function App() {
     )
   }
 
+  // ===============================
+  // REMOVE FROM CART
+  // ===============================
+
   const removeFromCart = (id) => {
     setCart((currentCart) =>
       currentCart.filter(
@@ -421,6 +521,10 @@ function App() {
       )
     )
   }
+
+  // ===============================
+  // UPDATE MENU QUANTITY
+  // ===============================
 
   const updateMenuQuantity = (
     id,
@@ -443,6 +547,29 @@ function App() {
     )
   }
 
+  // ===============================
+  // CHECKOUT AUTHENTICATION
+  // ===============================
+
+  const handleCheckoutRequest = () => {
+    const customerToken =
+      localStorage.getItem(
+        'customerToken'
+      )
+
+    if (!customerToken) {
+      setShowCustomerAuthPopup(true)
+      return
+    }
+
+    setIsCartOpen(false)
+    setIsCheckoutOpen(true)
+  }
+
+  // ===============================
+  // PLACE ORDER
+  // ===============================
+
   const handlePlaceOrder = (order) => {
     setCompletedOrder(order)
     setCart([])
@@ -456,6 +583,10 @@ function App() {
     0
   )
 
+  // ===============================
+  // ORDER SUCCESS
+  // ===============================
+
   if (completedOrder) {
     return (
       <OrderSuccess
@@ -466,6 +597,10 @@ function App() {
       />
     )
   }
+
+  // ===============================
+  // CHECKOUT
+  // ===============================
 
   if (isCheckoutOpen) {
     return (
@@ -480,13 +615,27 @@ function App() {
     )
   }
 
+  // ===============================
+  // MAIN CUSTOMER WEBSITE
+  // ===============================
+
   return (
     <div className="min-h-screen bg-[#FFFDF5]">
-      <Navbar />
+
+      {/* Navbar */}
+      <Navbar
+        onCartClick={() =>
+          setIsCartOpen(true)
+        }
+      />
 
       <main id="home">
+
+        {/* Hero */}
         <section className="mx-auto flex min-h-[70vh] max-w-7xl items-center px-4 py-16 sm:px-6 lg:px-8">
+
           <div>
+
             <p className="mb-3 font-semibold text-green-700">
               Fresh • Homemade • Pure Veg
             </p>
@@ -505,6 +654,7 @@ function App() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
+
               <a
                 href="#menu"
                 className="rounded-full bg-green-700 px-6 py-3 font-semibold text-white transition hover:bg-green-800"
@@ -518,19 +668,29 @@ function App() {
               >
                 Explore Menu
               </a>
+
             </div>
+
           </div>
+
         </section>
 
+        {/* Menu */}
         <Menu
           cart={cart}
           onAddToCart={addToCart}
           onUpdateQuantity={updateMenuQuantity}
         />
+
+        {/* About */}
+        <About />
+
       </main>
 
+      {/* Footer */}
       <Footer />
 
+      {/* Floating Cart Button */}
       <button
         onClick={() =>
           setIsCartOpen(true)
@@ -546,6 +706,7 @@ function App() {
         )}
       </button>
 
+      {/* Cart */}
       {isCartOpen && (
         <Cart
           cart={cart}
@@ -555,12 +716,65 @@ function App() {
           onIncrease={increaseQuantity}
           onDecrease={decreaseQuantity}
           onRemove={removeFromCart}
-          onCheckout={() => {
-            setIsCartOpen(false)
-            setIsCheckoutOpen(true)
-          }}
+          onCheckout={
+            handleCheckoutRequest
+          }
         />
       )}
+
+      {/* Customer Login / Signup Popup */}
+      {showCustomerAuthPopup && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
+
+          <div className="w-full max-w-md rounded-3xl bg-[#FFFDF5] p-6 shadow-2xl sm:p-8">
+
+            {/* Icon */}
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl">
+              🔐
+            </div>
+
+            {/* Heading */}
+            <div className="mt-5 text-center">
+
+              <h2 className="text-2xl font-bold text-gray-900">
+                Login or Signup Required
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-gray-600">
+                Please login or create an
+                account before placing your
+                order.
+              </p>
+
+            </div>
+
+            {/* Login / Signup */}
+            <button
+              onClick={() => {
+                setShowCustomerAuthPopup(false)
+                window.location.href =
+                  '/account'
+              }}
+              className="mt-6 w-full rounded-full bg-green-700 py-3.5 font-semibold text-white transition hover:bg-green-800"
+            >
+              Login / Signup
+            </button>
+
+            {/* Continue Shopping */}
+            <button
+              onClick={() =>
+                setShowCustomerAuthPopup(false)
+              }
+              className="mt-3 w-full rounded-full border border-green-200 bg-white py-3.5 font-semibold text-green-700 transition hover:bg-green-50"
+            >
+              Continue Shopping
+            </button>
+
+          </div>
+
+        </div>
+      )}
+
     </div>
   )
 }
