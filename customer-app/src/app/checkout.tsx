@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native'
 import { router } from 'expo-router'
+import RazorpayCheckout from 'react-native-razorpay'
 
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
@@ -27,11 +28,31 @@ type PaymentMethod =
 
 type CreatedOrder = {
   id: number
-  order_status: string
-  payment_status: string
+  order_status?: string
+  payment_status?: string
   subtotal: number
   delivery_charge: number
   total: number
+  razorpayOrderId?: string | null
+  razorpayPaymentId?: string | null
+}
+
+type RazorpayOrderResponse = {
+  success: boolean
+  message: string
+  order: {
+    id: string
+    amount: number
+    currency: string
+    keyId: string
+    calculatedTotal: number
+  }
+}
+
+type RazorpayPaymentResult = {
+  razorpay_payment_id: string
+  razorpay_order_id: string
+  razorpay_signature: string
 }
 
 export default function CheckoutScreen() {
@@ -70,6 +91,255 @@ export default function CheckoutScreen() {
     return Number(value).toFixed(0)
   }
 
+  function showError(
+    title: string,
+    message: string
+  ) {
+    Alert.alert(title, message)
+  }
+
+  async function createCashOrder() {
+    if (!customer) {
+      throw new Error(
+        'Customer account could not be found.'
+      )
+    }
+
+    const response =
+      await apiPost<{
+        success: boolean
+        message: string
+        order: CreatedOrder
+      }>('/api/orders', {
+        customer: {
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+        },
+
+        items: items.map((item) => ({
+          menuItemId: item.id,
+          quantity: item.quantity,
+        })),
+
+        deliveryType,
+
+        address:
+          deliveryType === 'delivery'
+            ? address.trim()
+            : null,
+
+        landmark:
+          deliveryType === 'delivery'
+            ? landmark.trim()
+            : null,
+
+        instructions:
+          instructions.trim() || null,
+
+        paymentMethod: 'cash',
+
+        paymentStatus: 'pending',
+      })
+
+    if (
+      !response.success ||
+      !response.order
+    ) {
+      throw new Error(
+        response.message ||
+          'Unable to place your order.'
+      )
+    }
+
+    return response.order
+  }
+
+  async function handleOnlinePayment() {
+    if (!customer) {
+      throw new Error(
+        'Customer account could not be found.'
+      )
+    }
+
+    // Razorpay native SDK is not available on Expo Web.
+    if (Platform.OS === 'web') {
+      throw new Error(
+        'Online payment is available in the Android/iOS app. Please use Cash on Delivery while testing on the web.'
+      )
+    }
+
+    // ------------------------------------------------
+    // STEP 1:
+    // Ask backend to create a Razorpay order.
+    // The backend calculates the amount from the
+    // database, so we never trust the frontend total.
+    // ------------------------------------------------
+
+    const razorpayOrderResponse =
+      await apiPost<RazorpayOrderResponse>(
+        '/api/orders/payment/create-order',
+        {
+          items: items.map((item) => ({
+            menuItemId: item.id,
+            quantity: item.quantity,
+          })),
+
+          deliveryType,
+        }
+      )
+
+    if (
+      !razorpayOrderResponse.success ||
+      !razorpayOrderResponse.order
+    ) {
+      throw new Error(
+        razorpayOrderResponse.message ||
+          'Unable to start online payment.'
+      )
+    }
+
+    const razorpayOrder =
+      razorpayOrderResponse.order
+
+    // Make sure the backend returned
+    // a valid Razorpay order.
+    if (
+      !razorpayOrder.id ||
+      !razorpayOrder.keyId ||
+      !razorpayOrder.amount ||
+      !razorpayOrder.currency
+    ) {
+      throw new Error(
+        'Invalid Razorpay order received from the server.'
+      )
+    }
+
+    // ------------------------------------------------
+    // STEP 2:
+    // Open Razorpay native checkout.
+    // ------------------------------------------------
+
+    const paymentResult =
+      (await RazorpayCheckout.open({
+        description:
+          "Jaya's Kitchen Order",
+        currency:
+          razorpayOrder.currency,
+        key:
+          razorpayOrder.keyId,
+        amount:
+          String(razorpayOrder.amount),
+        name:
+          "Jaya's Kitchen",
+        order_id:
+          razorpayOrder.id,
+
+        prefill: {
+          name:
+            customer.name,
+          contact:
+            customer.phone,
+          ...(customer.email
+            ? {
+                email:
+                  customer.email,
+              }
+            : {}),
+        },
+
+        theme: {
+          color:
+            '#2E7D32',
+        },
+      })) as RazorpayPaymentResult
+
+    // ------------------------------------------------
+    // STEP 3:
+    // Verify payment and create the actual
+    // Jaya's Kitchen order on the backend.
+    //
+    // The backend independently verifies:
+    // - Razorpay signature
+    // - payment/order relationship
+    // - captured status
+    // - currency
+    // - amount
+    // - duplicate payment
+    // ------------------------------------------------
+
+    if (
+      !paymentResult ||
+      !paymentResult.razorpay_payment_id ||
+      !paymentResult.razorpay_order_id ||
+      !paymentResult.razorpay_signature
+    ) {
+      throw new Error(
+        'Razorpay did not return complete payment details.'
+      )
+    }
+
+    const response =
+      await apiPost<{
+        success: boolean
+        message: string
+        order: CreatedOrder
+      }>('/api/orders', {
+        customer: {
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+        },
+
+        items: items.map((item) => ({
+          menuItemId: item.id,
+          quantity: item.quantity,
+        })),
+
+        deliveryType,
+
+        address:
+          deliveryType === 'delivery'
+            ? address.trim()
+            : null,
+
+        landmark:
+          deliveryType === 'delivery'
+            ? landmark.trim()
+            : null,
+
+        instructions:
+          instructions.trim() || null,
+
+        paymentMethod:
+          'online',
+
+        paymentStatus:
+          'paid',
+
+        razorpayOrderId:
+          paymentResult.razorpay_order_id,
+
+        razorpayPaymentId:
+          paymentResult.razorpay_payment_id,
+
+        razorpaySignature:
+          paymentResult.razorpay_signature,
+      })
+
+    if (
+      !response.success ||
+      !response.order
+    ) {
+      throw new Error(
+        response.message ||
+          'Payment succeeded, but the order could not be created.'
+      )
+    }
+
+    return response.order
+  }
+
   async function handlePlaceOrder() {
     if (!isLoggedIn || !customer) {
       Alert.alert(
@@ -92,7 +362,7 @@ export default function CheckoutScreen() {
     }
 
     if (items.length === 0) {
-      Alert.alert(
+      showError(
         'Cart is Empty',
         'Please add items to your cart before checkout.'
       )
@@ -104,7 +374,7 @@ export default function CheckoutScreen() {
       deliveryType === 'delivery' &&
       !address.trim()
     ) {
-      Alert.alert(
+      showError(
         'Delivery Address Required',
         'Please enter your complete delivery address.'
       )
@@ -112,72 +382,37 @@ export default function CheckoutScreen() {
       return
     }
 
-    if (paymentMethod === 'online') {
-      Alert.alert(
-        'Online Payment',
-        'Online payment will be connected next. Please select Cash on Delivery for now.'
-      )
-
+    if (isSubmitting) {
       return
     }
 
     try {
       setIsSubmitting(true)
 
-      const response =
-        await apiPost<{
-          success: boolean
-          message: string
-          order: CreatedOrder
-        }>('/api/orders', {
-          customer: {
-            name: customer.name,
-            phone: customer.phone,
-            email: customer.email,
-          },
+      let createdOrder:
+        | CreatedOrder
+        | undefined
 
-          items: items.map((item) => ({
-            menuItemId: item.id,
-            quantity: item.quantity,
-          })),
-
-          deliveryType,
-
-          address:
-            deliveryType === 'delivery'
-              ? address.trim()
-              : null,
-
-          landmark:
-            deliveryType === 'delivery'
-              ? landmark.trim()
-              : null,
-
-          instructions:
-            instructions.trim() || null,
-
-          paymentMethod: 'cash',
-
-          paymentStatus: 'pending',
-        })
-
-      if (
-        !response.success ||
-        !response.order
-      ) {
-        throw new Error(
-          response.message ||
-            'Unable to place your order.'
-        )
+      if (paymentMethod === 'cash') {
+        createdOrder =
+          await createCashOrder()
+      } else {
+        createdOrder =
+          await handleOnlinePayment()
       }
 
-      const createdOrder =
-        response.order
+      if (!createdOrder) {
+        throw new Error(
+          'Order could not be created.'
+        )
+      }
 
       clearCart()
 
       Alert.alert(
-        'Order Placed Successfully! 🎉',
+        paymentMethod === 'online'
+          ? 'Payment Successful! 🎉'
+          : 'Order Placed Successfully! 🎉',
         `Your order #${createdOrder.id} has been placed successfully.`,
         [
           {
@@ -195,10 +430,16 @@ export default function CheckoutScreen() {
         error
       )
 
-      Alert.alert(
-        'Order Failed',
+      const message =
+        error?.description ||
         error?.message ||
-          'Unable to place your order. Please try again.'
+        'Unable to place your order. Please try again.'
+
+      showError(
+        paymentMethod === 'online'
+          ? 'Payment Failed'
+          : 'Order Failed',
+        message
       )
     } finally {
       setIsSubmitting(false)
@@ -280,6 +521,11 @@ export default function CheckoutScreen() {
     )
   }
 
+  const displayedTotal =
+    deliveryType === 'delivery'
+      ? total
+      : subtotal
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -346,9 +592,11 @@ export default function CheckoutScreen() {
                 {customer.phone}
               </Text>
 
-              <Text style={styles.customerDetail}>
-                {customer.email}
-              </Text>
+              {customer.email ? (
+                <Text style={styles.customerDetail}>
+                  {customer.email}
+                </Text>
+              ) : null}
             </View>
           </View>
         </View>
@@ -680,6 +928,28 @@ export default function CheckoutScreen() {
           </Pressable>
         </View>
 
+        {/* Web Payment Notice */}
+        {paymentMethod === 'online' &&
+          Platform.OS === 'web' && (
+            <View style={styles.webPaymentNote}>
+              <Text style={styles.webPaymentIcon}>
+                📱
+              </Text>
+
+              <View style={styles.webPaymentContent}>
+                <Text style={styles.webPaymentTitle}>
+                  Mobile App Required
+                </Text>
+
+                <Text style={styles.webPaymentText}>
+                  Razorpay online payment will open
+                  in the Android/iOS app. Cash on
+                  Delivery can be tested on the web.
+                </Text>
+              </View>
+            </View>
+          )}
+
         {/* Order Summary */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>
@@ -768,10 +1038,7 @@ export default function CheckoutScreen() {
             <Text style={styles.totalValue}>
               ₹
               {formatPrice(
-                deliveryType ===
-                  'delivery'
-                  ? total
-                  : subtotal
+                displayedTotal
               )}
             </Text>
           </View>
@@ -805,7 +1072,10 @@ export default function CheckoutScreen() {
                   styles.placeOrderText
                 }
               >
-                Placing Order...
+                {paymentMethod ===
+                'online'
+                  ? 'Processing Payment...'
+                  : 'Placing Order...'}
               </Text>
             </View>
           ) : (
@@ -814,12 +1084,12 @@ export default function CheckoutScreen() {
                 styles.placeOrderText
               }
             >
-              Place Order • ₹
+              {paymentMethod ===
+              'online'
+                ? 'Pay Now • ₹'
+                : 'Place Order • ₹'}
               {formatPrice(
-                deliveryType ===
-                  'delivery'
-                  ? total
-                  : subtotal
+                displayedTotal
               )}
             </Text>
           )}
@@ -1094,6 +1364,39 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 12,
     color: '#6B7280',
+  },
+
+  webPaymentNote: {
+    flexDirection: 'row',
+    marginTop: -10,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+
+  webPaymentIcon: {
+    fontSize: 24,
+  },
+
+  webPaymentContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  webPaymentTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#9A3412',
+  },
+
+  webPaymentText: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#7C2D12',
   },
 
   summaryCard: {
