@@ -14,9 +14,17 @@ const app = express()
 const PORT = process.env.PORT || 5001
 
 const allowedOrigins = [
+  // Existing web application
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
+
+  // Expo development web
+  'http://localhost:8081',
+  'http://localhost:8082',
+  'http://localhost:8083',
+
+  // Production web application
   process.env.FRONTEND_URL,
 ].filter(Boolean)
 
@@ -24,7 +32,8 @@ app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests without an origin
-      // such as Postman or server-to-server requests
+      // such as native mobile apps,
+      // Postman, or server-to-server requests.
       if (!origin) {
         return callback(null, true)
       }
