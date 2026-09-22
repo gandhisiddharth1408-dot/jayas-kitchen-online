@@ -48,6 +48,7 @@ function CustomerAuth() {
     }))
 
     setMessage('')
+    setMessageType('')
   }
 
   // ===============================
@@ -69,6 +70,9 @@ function CustomerAuth() {
       email: '',
       otp: '',
     })
+
+    // Signup always uses mobile OTP
+    setLoginMethod('mobile')
 
     setMessage('')
     setMessageType('')
@@ -104,7 +108,7 @@ function CustomerAuth() {
 
     try {
       // ===============================
-      // BASIC FRONTEND VALIDATION
+      // NAME VALIDATION
       // ===============================
 
       if (
@@ -119,6 +123,10 @@ function CustomerAuth() {
         setIsLoading(false)
         return
       }
+
+      // ===============================
+      // MOBILE VALIDATION
+      // ===============================
 
       if (
         (isSignup ||
@@ -136,15 +144,47 @@ function CustomerAuth() {
         return
       }
 
+      // ===============================
+      // EMAIL VALIDATION
+      // ===============================
+      // Email is REQUIRED only when
+      // logging in using email.
+      //
+      // During signup it is OPTIONAL.
+
       if (
-        (isSignup ||
-          loginMethod === 'email') &&
+        !isSignup &&
+        loginMethod === 'email' &&
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
           formData.email.trim()
         )
       ) {
         setMessage(
           'Please enter a valid email address.'
+        )
+
+        setMessageType('error')
+        setIsLoading(false)
+        return
+      }
+
+      // ===============================
+      // OPTIONAL SIGNUP EMAIL
+      // ===============================
+      // If user enters an email during
+      // signup, validate it.
+      //
+      // If empty, continue without it.
+
+      if (
+        isSignup &&
+        formData.email.trim() &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          formData.email.trim()
+        )
+      ) {
+        setMessage(
+          'Please enter a valid email address or leave it blank.'
         )
 
         setMessageType('error')
@@ -320,6 +360,16 @@ function CustomerAuth() {
       )
 
       // ===============================
+      // NOTIFY NAVBAR
+      // ===============================
+
+      window.dispatchEvent(
+        new Event(
+          'customerAuthChanged'
+        )
+      )
+
+      // ===============================
       // SUCCESS MESSAGE
       // ===============================
 
@@ -444,11 +494,17 @@ function CustomerAuth() {
 
   return (
     <div className="min-h-screen bg-[#FFFDF5] px-4 py-10 sm:px-6">
+
       <div className="mx-auto flex min-h-[80vh] max-w-md items-center justify-center">
+
         <div className="w-full rounded-3xl border border-green-100 bg-white p-6 shadow-xl sm:p-8">
 
-          {/* Logo / Heading */}
+          {/* ================================= */}
+          {/* LOGO / HEADING */}
+          {/* ================================= */}
+
           <div className="mb-8 text-center">
+
             <h1 className="text-3xl font-bold text-green-800">
               Jaya's Kitchen
             </h1>
@@ -470,9 +526,13 @@ function CustomerAuth() {
                 ? 'Create an account to easily manage your orders.'
                 : 'Login to view your orders and track deliveries.'}
             </p>
+
           </div>
 
-          {/* Login / Signup Toggle */}
+          {/* ================================= */}
+          {/* LOGIN / SIGNUP TOGGLE */}
+          {/* ================================= */}
+
           <div className="mb-6 flex rounded-xl bg-green-50 p-1">
 
             <button
@@ -513,7 +573,10 @@ function CustomerAuth() {
 
           </div>
 
-          {/* Login Method */}
+          {/* ================================= */}
+          {/* LOGIN METHOD */}
+          {/* ================================= */}
+
           {!isSignup && (
             <div className="mb-6">
 
@@ -558,10 +621,14 @@ function CustomerAuth() {
                 </button>
 
               </div>
+
             </div>
           )}
 
-          {/* Signup Fields */}
+          {/* ================================= */}
+          {/* SIGNUP NAME */}
+          {/* ================================= */}
+
           {isSignup && (
             <div className="mb-4">
 
@@ -570,6 +637,7 @@ function CustomerAuth() {
                 className="mb-1.5 block text-sm font-medium text-gray-700"
               >
                 Full Name
+
                 <span className="ml-1 text-red-500">
                   *
                 </span>
@@ -591,7 +659,10 @@ function CustomerAuth() {
             </div>
           )}
 
-          {/* Mobile Field */}
+          {/* ================================= */}
+          {/* MOBILE FIELD */}
+          {/* ================================= */}
+
           {(isSignup ||
             loginMethod ===
               'mobile') && (
@@ -602,6 +673,7 @@ function CustomerAuth() {
                 className="mb-1.5 block text-sm font-medium text-gray-700"
               >
                 Mobile Number
+
                 <span className="ml-1 text-red-500">
                   *
                 </span>
@@ -625,7 +697,10 @@ function CustomerAuth() {
             </div>
           )}
 
-          {/* Email Field */}
+          {/* ================================= */}
+          {/* EMAIL FIELD */}
+          {/* ================================= */}
+
           {(isSignup ||
             loginMethod ===
               'email') && (
@@ -636,9 +711,16 @@ function CustomerAuth() {
                 className="mb-1.5 block text-sm font-medium text-gray-700"
               >
                 Email Address
-                <span className="ml-1 text-red-500">
-                  *
-                </span>
+
+                {isSignup ? (
+                  <span className="ml-1 text-xs font-normal text-gray-400">
+                    (Optional)
+                  </span>
+                ) : (
+                  <span className="ml-1 text-red-500">
+                    *
+                  </span>
+                )}
               </label>
 
               <input
@@ -649,15 +731,32 @@ function CustomerAuth() {
                 onChange={
                   handleChange
                 }
-                placeholder="Enter your email address"
-                required
+                placeholder={
+                  isSignup
+                    ? 'Enter your email address (optional)'
+                    : 'Enter your email address'
+                }
+                required={
+                  !isSignup &&
+                  loginMethod === 'email'
+                }
                 className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
               />
+
+              {/* Signup helper text */}
+              {isSignup && (
+                <p className="mt-1.5 text-xs text-gray-400">
+                  You can add and verify your email later from Profile Settings.
+                </p>
+              )}
 
             </div>
           )}
 
-          {/* OTP Field */}
+          {/* ================================= */}
+          {/* OTP FIELD */}
+          {/* ================================= */}
+
           {otpSent && (
             <div className="mb-4">
 
@@ -666,6 +765,7 @@ function CustomerAuth() {
                 className="mb-1.5 block text-sm font-medium text-gray-700"
               >
                 Enter OTP
+
                 <span className="ml-1 text-red-500">
                   *
                 </span>
@@ -726,18 +826,28 @@ function CustomerAuth() {
                 </button>
 
               </div>
+
             </div>
           )}
 
-          {/* Required Fields Note */}
+          {/* ================================= */}
+          {/* REQUIRED NOTE */}
+          {/* ================================= */}
+
           <p className="mb-4 text-xs text-gray-400">
+
             <span className="text-red-500">
               *
             </span>{' '}
+
             Required fields
+
           </p>
 
-          {/* Message */}
+          {/* ================================= */}
+          {/* MESSAGE */}
+          {/* ================================= */}
+
           {message && (
             <div
               className={`mb-4 rounded-xl px-4 py-3 text-sm ${
@@ -751,7 +861,10 @@ function CustomerAuth() {
             </div>
           )}
 
-          {/* Submit */}
+          {/* ================================= */}
+          {/* SUBMIT */}
+          {/* ================================= */}
+
           {!otpSent ? (
             <form
               onSubmit={
@@ -788,7 +901,10 @@ function CustomerAuth() {
             </form>
           )}
 
-          {/* Bottom Switch */}
+          {/* ================================= */}
+          {/* BOTTOM SWITCH */}
+          {/* ================================= */}
+
           <div className="mt-6 text-center text-sm text-gray-500">
 
             {isSignup
@@ -809,7 +925,10 @@ function CustomerAuth() {
 
           </div>
 
-          {/* Back to Home */}
+          {/* ================================= */}
+          {/* BACK TO HOME */}
+          {/* ================================= */}
+
           <div className="mt-5 text-center">
 
             <a
@@ -822,7 +941,9 @@ function CustomerAuth() {
           </div>
 
         </div>
+
       </div>
+
     </div>
   )
 }

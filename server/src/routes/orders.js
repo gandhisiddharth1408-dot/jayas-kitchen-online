@@ -14,6 +14,24 @@ const router = express.Router()
 const DELIVERY_CHARGE = 30
 const CURRENCY = 'INR'
 
+// --------------------------------------------------
+// MENU CACHE
+// --------------------------------------------------
+
+// Customer menu is cached in backend memory
+// to avoid unnecessary database queries.
+let menuCache = null
+let menuCacheTime = 0
+
+// Keep menu cached for 5 minutes
+const MENU_CACHE_DURATION =
+  5 * 60 * 1000
+
+function clearMenuCache() {
+  menuCache = null
+  menuCacheTime = 0
+}
+
 // Protect all admin routes
 router.use('/admin', adminAuth)
 
@@ -285,6 +303,25 @@ router.get(
   '/menu',
   async (req, res) => {
     try {
+      // ------------------------------------------------
+      // RETURN CACHED MENU IF AVAILABLE
+      // ------------------------------------------------
+
+      if (
+        menuCache &&
+        Date.now() - menuCacheTime <
+          MENU_CACHE_DURATION
+      ) {
+        return res.json({
+          success: true,
+          menuItems: menuCache,
+        })
+      }
+
+      // ------------------------------------------------
+      // FETCH FRESH MENU FROM DATABASE
+      // ------------------------------------------------
+
       const result =
         await pool.query(`
           SELECT
@@ -300,6 +337,13 @@ router.get(
           WHERE is_available = TRUE
           ORDER BY id ASC
         `)
+
+      // ------------------------------------------------
+      // STORE MENU IN CACHE
+      // ------------------------------------------------
+
+      menuCache = result.rows
+      menuCacheTime = Date.now()
 
       res.json({
         success: true,
@@ -769,6 +813,9 @@ router.post(
           ]
         )
 
+      // Clear customer menu cache
+      clearMenuCache()
+
       res.status(201).json({
         success: true,
         message:
@@ -887,6 +934,9 @@ router.patch(
         })
       }
 
+      // Clear customer menu cache
+      clearMenuCache()
+
       res.json({
         success: true,
         message:
@@ -937,6 +987,9 @@ router.delete(
             'Menu item not found',
         })
       }
+
+      // Clear customer menu cache
+      clearMenuCache()
 
       res.json({
         success: true,

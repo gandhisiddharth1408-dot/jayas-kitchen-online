@@ -27,6 +27,19 @@ const statusSteps = [
   },
 ]
 
+const emptyAddressForm = {
+  label: 'Home',
+  fullName: '',
+  phone: '',
+  houseNumber: '',
+  street: '',
+  addressLine2: '',
+  landmark: '',
+  city: 'Vadodara',
+  state: 'Gujarat',
+  pincode: '',
+}
+
 function CustomerDashboard() {
   const [customer, setCustomer] =
     useState(null)
@@ -64,22 +77,24 @@ function CustomerDashboard() {
     useState('')
 
   // ===============================
-  // SAVED ADDRESS STATE
+  // MULTIPLE ADDRESS STATE
   // ===============================
 
-  const [isEditingAddress, setIsEditingAddress] =
+  const [addresses, setAddresses] =
+    useState([])
+
+  const [isLoadingAddresses, setIsLoadingAddresses] =
     useState(false)
+
+  const [isAddressModalOpen, setIsAddressModalOpen] =
+    useState(false)
+
+  const [editingAddressId, setEditingAddressId] =
+    useState(null)
 
   const [addressForm, setAddressForm] =
     useState({
-      houseNumber: '',
-      street: '',
-      addressLine2: '',
-      landmark: '',
-      city: 'Vadodara',
-      state: 'Gujarat',
-      pincode: '',
-      addressType: 'Home',
+      ...emptyAddressForm,
     })
 
   const [isSavingAddress, setIsSavingAddress] =
@@ -91,13 +106,91 @@ function CustomerDashboard() {
   const [addressMessageType, setAddressMessageType] =
     useState('')
 
+  const [deletingAddressId, setDeletingAddressId] =
+    useState(null)
+
+  const [settingDefaultAddressId, setSettingDefaultAddressId] =
+    useState(null)
+
+  // ===============================
+  // EMAIL VERIFICATION STATE
+  // ===============================
+
+  const [isVerifyingEmail, setIsVerifyingEmail] =
+    useState(false)
+
+  const [emailOtp, setEmailOtp] =
+    useState('')
+
+  const [isSendingEmailOtp, setIsSendingEmailOtp] =
+    useState(false)
+
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] =
+    useState(false)
+
+  const [emailVerificationMessage, setEmailVerificationMessage] =
+    useState('')
+
+  const [emailVerificationMessageType, setEmailVerificationMessageType] =
+    useState('')
+
+  const [emailResendCooldown, setEmailResendCooldown] =
+    useState(0)
+
+  // ===============================
+  // SETTINGS STATE
+  // ===============================
+
+  const [showSettings, setShowSettings] =
+    useState(false)
+
+  const [orderNotifications, setOrderNotifications] =
+    useState(true)
+
+  const [offersNotifications, setOffersNotifications] =
+    useState(true)
+
+  // ===============================
+  // CLEAR CUSTOMER SESSION
+  // ===============================
+
+  const clearCustomerSession = () => {
+    localStorage.removeItem(
+      'customerToken'
+    )
+
+    localStorage.removeItem(
+      'customer'
+    )
+
+    window.dispatchEvent(
+      new Event(
+        'customerAuthChanged'
+      )
+    )
+  }
+
+  // ===============================
+  // GET TOKEN
+  // ===============================
+
+  const getCustomerToken = () => {
+    return localStorage.getItem(
+      'customerToken'
+    )
+  }
+
+  // ===============================
+  // LOAD DASHBOARD
+  // ===============================
+
   useEffect(() => {
     const token =
-      localStorage.getItem(
-        'customerToken'
-      )
+      getCustomerToken()
 
     if (!token) {
+      clearCustomerSession()
+
       window.location.href =
         '/account'
 
@@ -106,7 +199,48 @@ function CustomerDashboard() {
 
     fetchCustomerProfile(token)
     fetchRecentOrder(token)
+    fetchAddresses(token)
+
+    const searchParams =
+      new URLSearchParams(
+        window.location.search
+      )
+
+    if (
+      searchParams.get(
+        'settings'
+      ) === 'true'
+    ) {
+      setShowSettings(true)
+
+      window.history.replaceState(
+        {},
+        '',
+        '/dashboard'
+      )
+    }
   }, [])
+
+  // ===============================
+  // EMAIL RESEND COOLDOWN
+  // ===============================
+
+  useEffect(() => {
+    if (emailResendCooldown <= 0) {
+      return
+    }
+
+    const timer = setInterval(() => {
+      setEmailResendCooldown(
+        (previous) =>
+          previous > 0
+            ? previous - 1
+            : 0
+      )
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [emailResendCooldown])
 
   // ===============================
   // FETCH CURRENT CUSTOMER
@@ -134,18 +268,10 @@ function CustomerDashboard() {
 
       if (!response.ok) {
         if (
-          response.status ===
-          401 ||
-          response.status ===
-          404
+          response.status === 401 ||
+          response.status === 404
         ) {
-          localStorage.removeItem(
-            'customerToken'
-          )
-
-          localStorage.removeItem(
-            'customer'
-          )
+          clearCustomerSession()
 
           window.location.href =
             '/account'
@@ -184,6 +310,79 @@ function CustomerDashboard() {
   }
 
   // ===============================
+  // FETCH ADDRESSES
+  // ===============================
+
+  const fetchAddresses = async (
+    token = getCustomerToken()
+  ) => {
+    if (!token) {
+      return
+    }
+
+    setIsLoadingAddresses(true)
+
+    try {
+      const response =
+        await fetch(
+          `${API_URL}/api/otp/me/addresses`,
+          {
+            method: 'GET',
+
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        )
+
+      const data =
+        await response.json()
+
+      if (
+        response.status === 401 ||
+        response.status === 404
+      ) {
+        clearCustomerSession()
+
+        window.location.href =
+          '/account'
+
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            'Failed to fetch saved addresses.'
+        )
+      }
+
+      setAddresses(
+        Array.isArray(data.addresses)
+          ? data.addresses
+          : []
+      )
+    } catch (error) {
+      console.error(
+        'Address fetch failed:',
+        error
+      )
+
+      setAddressMessage(
+        error.message ||
+          'Unable to load your saved addresses.'
+      )
+
+      setAddressMessageType(
+        'error'
+      )
+    } finally {
+      setIsLoadingAddresses(false)
+    }
+  }
+
+  // ===============================
   // FETCH RECENT ORDER
   // ===============================
 
@@ -212,16 +411,9 @@ function CustomerDashboard() {
 
       if (!response.ok) {
         if (
-          response.status ===
-          401
+          response.status === 401
         ) {
-          localStorage.removeItem(
-            'customerToken'
-          )
-
-          localStorage.removeItem(
-            'customer'
-          )
+          clearCustomerSession()
 
           window.location.href =
             '/account'
@@ -325,11 +517,11 @@ function CustomerDashboard() {
     event.preventDefault()
 
     const token =
-      localStorage.getItem(
-        'customerToken'
-      )
+      getCustomerToken()
 
     if (!token) {
+      clearCustomerSession()
+
       window.location.href =
         '/account'
 
@@ -429,13 +621,7 @@ function CustomerDashboard() {
         response.status === 401 ||
         response.status === 404
       ) {
-        localStorage.removeItem(
-          'customerToken'
-        )
-
-        localStorage.removeItem(
-          'customer'
-        )
+        clearCustomerSession()
 
         window.location.href =
           '/account'
@@ -454,6 +640,12 @@ function CustomerDashboard() {
         localStorage.setItem(
           'customerToken',
           data.token
+        )
+
+        window.dispatchEvent(
+          new Event(
+            'customerAuthChanged'
+          )
         )
       }
 
@@ -503,66 +695,113 @@ function CustomerDashboard() {
   }
 
   // ===============================
-  // OPEN EDIT ADDRESS
+  // OPEN ADD ADDRESS
   // ===============================
 
-  const handleOpenEditAddress = () => {
-    if (!customer) {
-      return
-    }
+  const handleOpenAddAddress = () => {
+    setEditingAddressId(null)
 
     setAddressForm({
-      houseNumber:
-        customer.house_number ||
-        customer.houseNumber ||
-        '',
-
-      street:
-        customer.street ||
-        '',
-
-      addressLine2:
-        customer.address_line2 ||
-        customer.addressLine2 ||
-        '',
-
-      landmark:
-        customer.landmark ||
-        '',
-
+      ...emptyAddressForm,
+      fullName:
+        customer?.name || '',
+      phone:
+        customer?.phone || '',
       city:
-        customer.city ||
+        customer?.city ||
         'Vadodara',
-
       state:
-        customer.state ||
+        customer?.state ||
         'Gujarat',
-
-      pincode:
-        customer.pincode ||
-        '',
-
-      addressType:
-        customer.address_type ||
-        customer.addressType ||
-        'Home',
     })
 
     setAddressMessage('')
     setAddressMessageType('')
-    setIsEditingAddress(true)
+    setIsAddressModalOpen(true)
   }
 
   // ===============================
-  // CLOSE EDIT ADDRESS
+  // OPEN EDIT ADDRESS
   // ===============================
 
-  const handleCloseEditAddress = () => {
+  const handleOpenEditAddress = (
+    address
+  ) => {
+    if (!address) {
+      return
+    }
+
+    setEditingAddressId(
+      address.id
+    )
+
+    setAddressForm({
+      label:
+        address.label ||
+        'Home',
+
+      fullName:
+        address.full_name ||
+        address.fullName ||
+        customer?.name ||
+        '',
+
+      phone:
+        address.phone ||
+        customer?.phone ||
+        '',
+
+      houseNumber:
+        address.house_number ||
+        address.houseNumber ||
+        '',
+
+      street:
+        address.street ||
+        '',
+
+      addressLine2:
+        address.address_line2 ||
+        address.addressLine2 ||
+        '',
+
+      landmark:
+        address.landmark ||
+        '',
+
+      city:
+        address.city ||
+        'Vadodara',
+
+      state:
+        address.state ||
+        'Gujarat',
+
+      pincode:
+        address.pincode ||
+        '',
+    })
+
+    setAddressMessage('')
+    setAddressMessageType('')
+    setIsAddressModalOpen(true)
+  }
+
+  // ===============================
+  // CLOSE ADDRESS MODAL
+  // ===============================
+
+  const handleCloseAddressModal = () => {
     if (isSavingAddress) {
       return
     }
 
-    setIsEditingAddress(false)
+    setIsAddressModalOpen(false)
+    setEditingAddressId(null)
+
+    setAddressForm({
+      ...emptyAddressForm,
+    })
 
     setAddressMessage('')
     setAddressMessageType('')
@@ -591,6 +830,13 @@ function CustomerDashboard() {
                   ''
                 )
                 .slice(0, 6)
+            : name === 'phone'
+            ? value
+                .replace(
+                  /\D/g,
+                  ''
+                )
+                .slice(0, 10)
             : value,
       })
     )
@@ -609,11 +855,11 @@ function CustomerDashboard() {
     event.preventDefault()
 
     const token =
-      localStorage.getItem(
-        'customerToken'
-      )
+      getCustomerToken()
 
     if (!token) {
+      clearCustomerSession()
+
       window.location.href =
         '/account'
 
@@ -625,6 +871,15 @@ function CustomerDashboard() {
     setAddressMessageType('')
 
     try {
+      const cleanLabel =
+        addressForm.label.trim()
+
+      const cleanFullName =
+        addressForm.fullName.trim()
+
+      const cleanPhone =
+        addressForm.phone.trim()
+
       const cleanHouseNumber =
         addressForm.houseNumber.trim()
 
@@ -646,12 +901,52 @@ function CustomerDashboard() {
       const cleanPincode =
         addressForm.pincode.trim()
 
-      const cleanAddressType =
-        addressForm.addressType.trim()
+      if (
+        !['Home', 'Work', 'Other'].includes(
+          cleanLabel
+        )
+      ) {
+        setAddressMessage(
+          'Please select a valid address type.'
+        )
 
-      // -------------------------------
-      // REQUIRED FIELD VALIDATION
-      // -------------------------------
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      if (!cleanFullName) {
+        setAddressMessage(
+          'Please enter the full name.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
+
+      if (
+        !/^[0-9]{10}$/.test(
+          cleanPhone
+        )
+      ) {
+        setAddressMessage(
+          'Please enter a valid 10-digit mobile number.'
+        )
+
+        setAddressMessageType(
+          'error'
+        )
+
+        setIsSavingAddress(false)
+        return
+      }
 
       if (!cleanHouseNumber) {
         setAddressMessage(
@@ -722,113 +1017,51 @@ function CustomerDashboard() {
         return
       }
 
-      // -------------------------------
-      // LENGTH VALIDATION
-      // -------------------------------
+      const body = {
+        label:
+          cleanLabel,
 
-      if (
-        cleanHouseNumber.length >
-        100
-      ) {
-        setAddressMessage(
-          'House / Flat / Building number must be 100 characters or less.'
-        )
+        fullName:
+          cleanFullName,
 
-        setAddressMessageType(
-          'error'
-        )
+        phone:
+          cleanPhone,
 
-        setIsSavingAddress(false)
-        return
+        houseNumber:
+          cleanHouseNumber,
+
+        street:
+          cleanStreet,
+
+        addressLine2:
+          cleanAddressLine2,
+
+        landmark:
+          cleanLandmark,
+
+        city:
+          cleanCity,
+
+        state:
+          cleanState,
+
+        pincode:
+          cleanPincode,
       }
 
-      if (
-        cleanStreet.length >
-        255
-      ) {
-        setAddressMessage(
-          'Street / Area / Society must be 255 characters or less.'
-        )
-
-        setAddressMessageType(
-          'error'
-        )
-
-        setIsSavingAddress(false)
-        return
-      }
-
-      if (
-        cleanAddressLine2.length >
-        255
-      ) {
-        setAddressMessage(
-          'Address Line 2 must be 255 characters or less.'
-        )
-
-        setAddressMessageType(
-          'error'
-        )
-
-        setIsSavingAddress(false)
-        return
-      }
-
-      if (
-        cleanLandmark.length >
-        255
-      ) {
-        setAddressMessage(
-          'Landmark must be 255 characters or less.'
-        )
-
-        setAddressMessageType(
-          'error'
-        )
-
-        setIsSavingAddress(false)
-        return
-      }
-
-      // -------------------------------
-      // COMBINE ADDRESS
-      // -------------------------------
-
-      const addressParts = [
-        cleanHouseNumber,
-        cleanStreet,
-        cleanAddressLine2,
-        `${cleanCity}, ${cleanState} - ${cleanPincode}`,
-      ].filter(Boolean)
-
-      const combinedAddress =
-        addressParts.join(', ')
-
-      if (
-        combinedAddress.length >
-        500
-      ) {
-        setAddressMessage(
-          'The complete address must be 500 characters or less.'
-        )
-
-        setAddressMessageType(
-          'error'
-        )
-
-        setIsSavingAddress(false)
-        return
-      }
-
-      // -------------------------------
-      // SAVE ADDRESS
-      // -------------------------------
+      const url =
+        editingAddressId
+          ? `${API_URL}/api/otp/me/addresses/${editingAddressId}`
+          : `${API_URL}/api/otp/me/addresses`
 
       const response =
         await fetch(
-          `${API_URL}/api/otp/me/address`,
+          url,
           {
-            method: 'PUT',
+            method:
+              editingAddressId
+                ? 'PUT'
+                : 'POST',
 
             headers: {
               'Content-Type':
@@ -838,65 +1071,26 @@ function CustomerDashboard() {
                 `Bearer ${token}`,
             },
 
-            body: JSON.stringify({
-              address:
-                combinedAddress,
-
-              houseNumber:
-                cleanHouseNumber,
-
-              street:
-                cleanStreet,
-
-              addressLine2:
-                cleanAddressLine2,
-
-              landmark:
-                cleanLandmark,
-
-              city:
-                cleanCity,
-
-              state:
-                cleanState,
-
-              pincode:
-                cleanPincode,
-
-              addressType:
-                cleanAddressType,
-            }),
+            body: JSON.stringify(
+              body
+            ),
           }
         )
 
       const data =
         await response.json()
 
-      // -------------------------------
-      // AUTH ERROR
-      // -------------------------------
-
       if (
         response.status === 401 ||
         response.status === 404
       ) {
-        localStorage.removeItem(
-          'customerToken'
-        )
-
-        localStorage.removeItem(
-          'customer'
-        )
+        clearCustomerSession()
 
         window.location.href =
           '/account'
 
         return
       }
-
-      // -------------------------------
-      // OTHER ERROR
-      // -------------------------------
 
       if (!response.ok) {
         throw new Error(
@@ -905,83 +1099,24 @@ function CustomerDashboard() {
         )
       }
 
-      // -------------------------------
-      // SAVE NEW JWT
-      // -------------------------------
-
-      if (data.token) {
-        localStorage.setItem(
-          'customerToken',
-          data.token
-        )
-      }
-
-      // -------------------------------
-      // UPDATE CUSTOMER
-      // -------------------------------
-
-      if (data.customer) {
-        setCustomer(
-          data.customer
-        )
-
-        localStorage.setItem(
-          'customer',
-          JSON.stringify(
-            data.customer
-          )
-        )
-      } else {
-        setCustomer(
-          (previous) => ({
-            ...previous,
-
-            address:
-              combinedAddress,
-
-            house_number:
-              cleanHouseNumber,
-
-            street:
-              cleanStreet,
-
-            address_line2:
-              cleanAddressLine2,
-
-            landmark:
-              cleanLandmark,
-
-            city:
-              cleanCity,
-
-            state:
-              cleanState,
-
-            pincode:
-              cleanPincode,
-
-            address_type:
-              cleanAddressType,
-          })
-        )
-      }
-
       setAddressMessage(
-        'Delivery address saved successfully.'
+        editingAddressId
+          ? 'Address updated successfully.'
+          : 'Address added successfully.'
       )
 
       setAddressMessageType(
         'success'
       )
 
+      await fetchAddresses(token)
+
       setTimeout(() => {
-        setIsEditingAddress(false)
-        setAddressMessage('')
-        setAddressMessageType('')
-      }, 1000)
+        handleCloseAddressModal()
+      }, 700)
     } catch (error) {
       console.error(
-        'Address update failed:',
+        'Address save failed:',
         error
       )
 
@@ -999,17 +1134,524 @@ function CustomerDashboard() {
   }
 
   // ===============================
+  // DELETE ADDRESS
+  // ===============================
+
+  const handleDeleteAddress = async (
+    addressId
+  ) => {
+    const token =
+      getCustomerToken()
+
+    if (!token) {
+      clearCustomerSession()
+
+      window.location.href =
+        '/account'
+
+      return
+    }
+
+    const address =
+      addresses.find(
+        (item) =>
+          item.id === addressId
+      )
+
+    if (!address) {
+      return
+    }
+
+    const confirmed =
+      window.confirm(
+        `Delete your ${address.label || 'saved'} address?`
+      )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingAddressId(
+      addressId
+    )
+
+    setAddressMessage('')
+    setAddressMessageType('')
+
+    try {
+      const response =
+        await fetch(
+          `${API_URL}/api/otp/me/addresses/${addressId}`,
+          {
+            method: 'DELETE',
+
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        )
+
+      const data =
+        await response.json()
+
+      if (
+        response.status === 401 ||
+        response.status === 404
+      ) {
+        clearCustomerSession()
+
+        window.location.href =
+          '/account'
+
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            'Failed to delete address.'
+        )
+      }
+
+      await fetchAddresses(token)
+    } catch (error) {
+      console.error(
+        'Address delete failed:',
+        error
+      )
+
+      setAddressMessage(
+        error.message ||
+          'Unable to delete the address.'
+      )
+
+      setAddressMessageType(
+        'error'
+      )
+    } finally {
+      setDeletingAddressId(null)
+    }
+  }
+
+  // ===============================
+  // SET DEFAULT ADDRESS
+  // ===============================
+
+  const handleSetDefaultAddress = async (
+    addressId
+  ) => {
+    const token =
+      getCustomerToken()
+
+    if (!token) {
+      clearCustomerSession()
+
+      window.location.href =
+        '/account'
+
+      return
+    }
+
+    setSettingDefaultAddressId(
+      addressId
+    )
+
+    setAddressMessage('')
+    setAddressMessageType('')
+
+    try {
+      const response =
+        await fetch(
+          `${API_URL}/api/otp/me/addresses/${addressId}/default`,
+          {
+            method: 'PUT',
+
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        )
+
+      const data =
+        await response.json()
+
+      if (
+        response.status === 401 ||
+        response.status === 404
+      ) {
+        clearCustomerSession()
+
+        window.location.href =
+          '/account'
+
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            'Failed to set default address.'
+        )
+      }
+
+      await fetchAddresses(token)
+    } catch (error) {
+      console.error(
+        'Set default address failed:',
+        error
+      )
+
+      setAddressMessage(
+        error.message ||
+          'Unable to set the default address.'
+      )
+
+      setAddressMessageType(
+        'error'
+      )
+    } finally {
+      setSettingDefaultAddressId(
+        null
+      )
+    }
+  }
+
+  // ===============================
+  // OPEN EMAIL VERIFICATION
+  // ===============================
+
+  const handleOpenEmailVerification = () => {
+    if (!customer?.email) {
+      handleOpenEditProfile()
+      return
+    }
+
+    if (customer.email_verified) {
+      return
+    }
+
+    setEmailOtp('')
+    setEmailVerificationMessage('')
+    setEmailVerificationMessageType('')
+    setIsVerifyingEmail(true)
+  }
+
+  // ===============================
+  // CLOSE EMAIL VERIFICATION
+  // ===============================
+
+  const handleCloseEmailVerification = () => {
+    if (
+      isSendingEmailOtp ||
+      isVerifyingEmailOtp
+    ) {
+      return
+    }
+
+    setIsVerifyingEmail(false)
+    setEmailOtp('')
+    setEmailVerificationMessage('')
+    setEmailVerificationMessageType('')
+  }
+
+  // ===============================
+  // SEND EMAIL VERIFICATION OTP
+  // ===============================
+
+  const handleSendEmailVerificationOtp = async () => {
+    const token =
+      getCustomerToken()
+
+    if (!token) {
+      clearCustomerSession()
+
+      window.location.href =
+        '/account'
+
+      return
+    }
+
+    if (!customer?.email) {
+      setEmailVerificationMessage(
+        'Please add your email address first.'
+      )
+
+      setEmailVerificationMessageType(
+        'error'
+      )
+
+      return
+    }
+
+    if (
+      customer.email_verified
+    ) {
+      setEmailVerificationMessage(
+        'Your email is already verified.'
+      )
+
+      setEmailVerificationMessageType(
+        'success'
+      )
+
+      return
+    }
+
+    if (emailResendCooldown > 0) {
+      return
+    }
+
+    setIsSendingEmailOtp(true)
+    setEmailVerificationMessage('')
+    setEmailVerificationMessageType('')
+
+    try {
+      const response =
+        await fetch(
+          `${API_URL}/api/otp/me/email/send`,
+          {
+            method: 'POST',
+
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        )
+
+      const data =
+        await response.json()
+
+      if (
+        response.status === 401 ||
+        response.status === 404
+      ) {
+        clearCustomerSession()
+
+        window.location.href =
+          '/account'
+
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            'Unable to send verification OTP.'
+        )
+      }
+
+      setEmailOtp('')
+
+      setEmailResendCooldown(
+        60
+      )
+
+      setEmailVerificationMessage(
+        data.message ||
+          'Verification OTP sent to your email address.'
+      )
+
+      setEmailVerificationMessageType(
+        'success'
+      )
+    } catch (error) {
+      console.error(
+        'Email verification OTP error:',
+        error
+      )
+
+      setEmailVerificationMessage(
+        error.message ||
+          'Unable to send verification OTP.'
+      )
+
+      setEmailVerificationMessageType(
+        'error'
+      )
+    } finally {
+      setIsSendingEmailOtp(false)
+    }
+  }
+
+  // ===============================
+  // VERIFY EMAIL OTP
+  // ===============================
+
+  const handleVerifyEmailOtp = async (
+    event
+  ) => {
+    event.preventDefault()
+
+    const token =
+      getCustomerToken()
+
+    if (!token) {
+      clearCustomerSession()
+
+      window.location.href =
+        '/account'
+
+      return
+    }
+
+    const cleanOtp =
+      emailOtp.trim()
+
+    if (
+      !/^[0-9]{6}$/.test(
+        cleanOtp
+      )
+    ) {
+      setEmailVerificationMessage(
+        'Please enter a valid 6-digit OTP.'
+      )
+
+      setEmailVerificationMessageType(
+        'error'
+      )
+
+      return
+    }
+
+    setIsVerifyingEmailOtp(true)
+    setEmailVerificationMessage('')
+    setEmailVerificationMessageType('')
+
+    try {
+      const response =
+        await fetch(
+          `${API_URL}/api/otp/me/email/verify`,
+          {
+            method: 'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+
+              Authorization:
+                `Bearer ${token}`,
+            },
+
+            body: JSON.stringify({
+              otp: cleanOtp,
+            }),
+          }
+        )
+
+      const data =
+        await response.json()
+
+      if (
+        response.status === 401 ||
+        response.status === 404
+      ) {
+        clearCustomerSession()
+
+        window.location.href =
+          '/account'
+
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            'Unable to verify email.'
+        )
+      }
+
+      if (data.token) {
+        localStorage.setItem(
+          'customerToken',
+          data.token
+        )
+      }
+
+      if (data.customer) {
+        setCustomer(
+          data.customer
+        )
+
+        localStorage.setItem(
+          'customer',
+          JSON.stringify(
+            data.customer
+          )
+        )
+      } else {
+        setCustomer(
+          (previous) => ({
+            ...previous,
+            email_verified:
+              true,
+          })
+        )
+      }
+
+      window.dispatchEvent(
+        new Event(
+          'customerAuthChanged'
+        )
+      )
+
+      setEmailVerificationMessage(
+        'Email verified successfully!'
+      )
+
+      setEmailVerificationMessageType(
+        'success'
+      )
+
+      setTimeout(() => {
+        setIsVerifyingEmail(false)
+        setEmailOtp('')
+        setEmailVerificationMessage('')
+        setEmailVerificationMessageType('')
+      }, 1200)
+    } catch (error) {
+      console.error(
+        'Email verification failed:',
+        error
+      )
+
+      setEmailVerificationMessage(
+        error.message ||
+          'Unable to verify email. Please try again.'
+      )
+
+      setEmailVerificationMessageType(
+        'error'
+      )
+    } finally {
+      setIsVerifyingEmailOtp(false)
+    }
+  }
+
+  // ===============================
+  // OPEN SETTINGS
+  // ===============================
+
+  const handleOpenSettings = () => {
+    setShowSettings(true)
+  }
+
+  // ===============================
+  // CLOSE SETTINGS
+  // ===============================
+
+  const handleCloseSettings = () => {
+    setShowSettings(false)
+  }
+
+  // ===============================
   // LOGOUT
   // ===============================
 
   const handleLogout = () => {
-    localStorage.removeItem(
-      'customerToken'
-    )
-
-    localStorage.removeItem(
-      'customer'
-    )
+    clearCustomerSession()
 
     window.location.href =
       '/account'
@@ -1060,12 +1702,23 @@ function CustomerDashboard() {
         )
       : -1
 
+  const defaultAddress =
+    addresses.find(
+      (address) =>
+        address.is_default
+    ) ||
+    addresses[0] ||
+    null
+
   return (
     <div className="min-h-screen bg-[#f8f5ec] px-4 py-8 sm:px-6 lg:px-8">
 
       <div className="mx-auto max-w-6xl">
 
-        {/* Header */}
+        {/* ================================= */}
+        {/* HEADER */}
+        {/* ================================= */}
+
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
           <div>
@@ -1087,22 +1740,31 @@ function CustomerDashboard() {
             </p>
           </div>
 
-          <button
-            onClick={
-              handleLogout
-            }
-            className="w-fit rounded-lg border border-red-200 bg-white px-5 py-2.5 font-medium text-red-600 transition hover:bg-red-50"
-          >
-            Logout
-          </button>
+          <div className="flex flex-wrap gap-2">
+
+            <button
+              type="button"
+              onClick={
+                handleLogout
+              }
+              className="rounded-lg border border-red-200 bg-white px-5 py-2.5 font-medium text-red-600 transition hover:bg-red-50"
+            >
+              Logout
+            </button>
+
+          </div>
 
         </div>
 
-        {/* Quick Actions */}
+        {/* ================================= */}
+        {/* QUICK ACTIONS */}
+        {/* ================================= */}
+
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
           {/* My Orders */}
           <button
+            type="button"
             onClick={() =>
               (window.location.href =
                 '/my-orders')
@@ -1125,6 +1787,7 @@ function CustomerDashboard() {
 
           {/* Browse Menu */}
           <button
+            type="button"
             onClick={() =>
               (window.location.href =
                 '/#menu')
@@ -1211,162 +1874,313 @@ function CustomerDashboard() {
 
         </div>
 
-        {/* Saved Address */}
+        {/* ================================= */}
+        {/* SAVED ADDRESSES */}
+        {/* ================================= */}
+
         <div className="mb-8 rounded-2xl border border-green-100 bg-white p-6 shadow-sm sm:p-8">
 
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
             <div>
               <h2 className="text-xl font-bold text-gray-900">
-                Saved Address
+                Delivery Addresses
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                Your default delivery address
+                Manage your saved delivery addresses
               </p>
             </div>
 
-            {customer && (
-              <button
-                type="button"
-                onClick={
-                  handleOpenEditAddress
-                }
-                className="w-fit rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-100"
-              >
-                {customer.address
-                  ? 'Edit Address'
-                  : 'Add Address'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={
+                handleOpenAddAddress
+              }
+              className="w-fit rounded-lg bg-green-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800"
+            >
+              + Add Address
+            </button>
 
           </div>
 
-          {customer?.address ? (
-            <div className="rounded-xl bg-green-50 p-5">
-
-              <div className="flex items-start gap-4">
-
-                {/* Location Icon */}
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
-                  📍
-                </div>
-
-                <div className="min-w-0 flex-1">
-
-                  {/* Address Type */}
-                  <div className="flex flex-wrap items-center gap-2">
-
-                    <p className="font-semibold text-gray-900">
-                      {customer.address_type ||
-                        customer.addressType ||
-                        'Home'}
-                    </p>
-
-                    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
-                      Delivery Address
-                    </span>
-
-                  </div>
-
-                  {/* House / Flat */}
-                  {(customer.house_number ||
-                    customer.houseNumber) && (
-                    <p className="mt-3 text-sm font-semibold text-gray-900">
-                      {customer.house_number ||
-                        customer.houseNumber}
-                    </p>
-                  )}
-
-                  {/* Street */}
-                  {customer.street && (
-                    <p className="mt-1 break-words text-sm leading-6 text-gray-700">
-                      {customer.street}
-                    </p>
-                  )}
-
-                  {/* Address Line 2 */}
-                  {(customer.address_line2 ||
-                    customer.addressLine2) && (
-                    <p className="break-words text-sm leading-6 text-gray-700">
-                      {customer.address_line2 ||
-                        customer.addressLine2}
-                    </p>
-                  )}
-
-                  {/* City / State / Pincode */}
-                  {(customer.city ||
-                    customer.state ||
-                    customer.pincode) && (
-                    <p className="mt-1 text-sm leading-6 text-gray-700">
-
-                      {customer.city &&
-                        customer.city}
-
-                      {customer.city &&
-                        customer.state &&
-                        ', '}
-
-                      {customer.state &&
-                        customer.state}
-
-                      {customer.pincode &&
-                        ` - ${customer.pincode}`}
-
-                    </p>
-                  )}
-
-                  {/* Landmark */}
-                  {customer.landmark && (
-                    <p className="mt-3 text-sm text-gray-600">
-
-                      <span className="font-medium text-gray-800">
-                        Landmark:
-                      </span>{' '}
-
-                      {customer.landmark}
-
-                    </p>
-                  )}
-
-                </div>
-
-              </div>
-
+          {isLoadingAddresses ? (
+            <div className="rounded-xl bg-green-50 p-8 text-center text-sm text-gray-500">
+              Loading your saved addresses...
             </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-green-200 bg-green-50/50 p-6 text-center">
+          ) : addresses.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-green-200 bg-green-50/50 p-8 text-center">
 
-              <div className="mb-3 text-3xl">
+              <div className="mb-3 text-4xl">
                 📍
               </div>
 
               <h3 className="font-bold text-gray-900">
-                No Saved Address
+                No Saved Addresses
               </h3>
 
               <p className="mt-1 text-sm text-gray-600">
-                Add your delivery address to make checkout faster.
+                Add an address to make checkout faster.
               </p>
 
-              {customer && (
-                <button
-                  type="button"
-                  onClick={
-                    handleOpenEditAddress
-                  }
-                  className="mt-4 rounded-lg bg-green-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800"
-                >
-                  Add Delivery Address
-                </button>
+              <button
+                type="button"
+                onClick={
+                  handleOpenAddAddress
+                }
+                className="mt-5 rounded-lg bg-green-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800"
+              >
+                Add Delivery Address
+              </button>
+
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+
+              {addresses.map(
+                (address) => (
+                  <div
+                    key={
+                      address.id
+                    }
+                    className={`rounded-2xl border p-5 transition ${
+                      address.is_default
+                        ? 'border-green-300 bg-green-50'
+                        : 'border-gray-100 bg-white hover:border-green-200'
+                    }`}
+                  >
+
+                    {/* Address Header */}
+
+                    <div className="mb-4 flex items-start justify-between gap-3">
+
+                      <div className="flex min-w-0 items-center gap-3">
+
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
+                          {address.label ===
+                          'Work'
+                            ? '💼'
+                            : address.label ===
+                              'Other'
+                            ? '📍'
+                            : '🏠'}
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <div className="flex flex-wrap items-center gap-2">
+
+                            <h3 className="font-bold text-gray-900">
+                              {address.label ||
+                                'Home'}
+                            </h3>
+
+                            {address.is_default && (
+                              <span className="rounded-full bg-green-700 px-2.5 py-1 text-xs font-semibold text-white">
+                                Default
+                              </span>
+                            )}
+
+                          </div>
+
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            Delivery Address
+                          </p>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                    {/* Address Details */}
+
+                    <div className="space-y-1.5 text-sm text-gray-700">
+
+                      <p className="font-semibold text-gray-900">
+                        {address.full_name ||
+                          address.fullName}
+                      </p>
+
+                      {(address.phone) && (
+                        <p>
+                          {address.phone}
+                        </p>
+                      )}
+
+                      {address.house_number && (
+                        <p className="font-medium text-gray-900">
+                          {address.house_number}
+                        </p>
+                      )}
+
+                      {address.street && (
+                        <p className="break-words">
+                          {address.street}
+                        </p>
+                      )}
+
+                      {address.address_line2 && (
+                        <p className="break-words">
+                          {address.address_line2}
+                        </p>
+                      )}
+
+                      <p>
+                        {address.city}
+                        {address.state
+                          ? `, ${address.state}`
+                          : ''}
+                        {address.pincode
+                          ? ` - ${address.pincode}`
+                          : ''}
+                      </p>
+
+                      {address.landmark && (
+                        <p className="pt-1 text-gray-600">
+                          <span className="font-medium text-gray-800">
+                            Landmark:
+                          </span>{' '}
+                          {address.landmark}
+                        </p>
+                      )}
+
+                    </div>
+
+                    {/* Actions */}
+
+                    <div className="mt-5 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleOpenEditAddress(
+                            address
+                          )
+                        }
+                        className="rounded-lg border border-green-200 bg-white px-3 py-2 text-xs font-semibold text-green-700 transition hover:bg-green-50"
+                      >
+                        Edit
+                      </button>
+
+                      {!address.is_default && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleSetDefaultAddress(
+                              address.id
+                            )
+                          }
+                          disabled={
+                            settingDefaultAddressId ===
+                            address.id
+                          }
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {settingDefaultAddressId ===
+                          address.id
+                            ? 'Setting...'
+                            : 'Set as Default'}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDeleteAddress(
+                            address.id
+                          )
+                        }
+                        disabled={
+                          deletingAddressId ===
+                          address.id
+                        }
+                        className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingAddressId ===
+                        address.id
+                          ? 'Deleting...'
+                          : 'Delete'}
+                      </button>
+
+                    </div>
+
+                  </div>
+                )
               )}
 
             </div>
           )}
 
+          {addressMessage && !isAddressModalOpen && (
+            <div
+              className={`mt-5 rounded-xl px-4 py-3 text-sm ${
+                addressMessageType ===
+                'success'
+                  ? 'bg-green-50 text-green-700'
+                  : 'bg-red-50 text-red-600'
+              }`}
+            >
+              {addressMessage}
+            </div>
+          )}
+
         </div>
 
-        {/* Recent Order */}
+        {/* ================================= */}
+        {/* DEFAULT ADDRESS SUMMARY */}
+        {/* ================================= */}
+
+        {defaultAddress && (
+          <div className="mb-8 rounded-2xl border border-green-100 bg-green-50 p-6">
+
+            <div className="flex items-start gap-4">
+
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-xl shadow-sm">
+                ⭐
+              </div>
+
+              <div className="min-w-0">
+
+                <p className="text-sm font-semibold text-green-700">
+                  Default delivery address
+                </p>
+
+                <p className="mt-1 font-bold text-gray-900">
+                  {defaultAddress.label ||
+                    'Home'}{' '}
+                  ·{' '}
+                  {defaultAddress.full_name ||
+                    defaultAddress.fullName}
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-gray-700">
+                  {defaultAddress.house_number
+                    ? `${defaultAddress.house_number}, `
+                    : ''}
+                  {defaultAddress.street
+                    ? `${defaultAddress.street}, `
+                    : ''}
+                  {defaultAddress.city}
+                  {defaultAddress.state
+                    ? `, ${defaultAddress.state}`
+                    : ''}
+                  {defaultAddress.pincode
+                    ? ` - ${defaultAddress.pincode}`
+                    : ''}
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* ================================= */}
+        {/* RECENT ORDER */}
+        {/* ================================= */}
+
         <div className="rounded-2xl border border-green-100 bg-white p-6 shadow-sm sm:p-8">
 
           <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1383,6 +2197,7 @@ function CustomerDashboard() {
 
             {recentOrder && (
               <button
+                type="button"
                 onClick={() =>
                   (window.location.href =
                     '/my-orders')
@@ -1421,6 +2236,7 @@ function CustomerDashboard() {
               </p>
 
               <button
+                type="button"
                 onClick={() =>
                   (window.location.href =
                     '/#menu')
@@ -1434,7 +2250,6 @@ function CustomerDashboard() {
           ) : (
             <div>
 
-              {/* Order Summary */}
               <div className="mb-8 grid gap-4 rounded-xl bg-green-50 p-5 sm:grid-cols-3">
 
                 <div>
@@ -1474,7 +2289,6 @@ function CustomerDashboard() {
 
               </div>
 
-              {/* Cancelled */}
               {recentOrder.orderStatus ===
               'cancelled' ? (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
@@ -1495,7 +2309,6 @@ function CustomerDashboard() {
                 </div>
               ) : (
                 <>
-                  {/* Status Tracker */}
                   <div className="overflow-x-auto pb-4">
 
                     <div className="flex min-w-[700px] items-start">
@@ -1574,7 +2387,6 @@ function CustomerDashboard() {
 
                   </div>
 
-                  {/* Items */}
                   <div className="mt-6 border-t border-gray-100 pt-6">
 
                     <h3 className="mb-4 font-bold text-gray-900">
@@ -1631,7 +2443,10 @@ function CustomerDashboard() {
 
         </div>
 
-        {/* Footer */}
+        {/* ================================= */}
+        {/* FOOTER */}
+        {/* ================================= */}
+
         <div className="mt-8 text-center text-sm text-gray-500">
           Jaya's Kitchen · Home Tiffin
           & Catering Services
@@ -1765,6 +2580,10 @@ function CustomerDashboard() {
                   className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
                 />
 
+                <p className="mt-1.5 text-xs text-gray-400">
+                  You can verify your email after saving it.
+                </p>
+
               </div>
 
               {profileMessage && (
@@ -1816,33 +2635,40 @@ function CustomerDashboard() {
       )}
 
       {/* ================================= */}
-      {/* EDIT ADDRESS MODAL */}
+      {/* ADD / EDIT ADDRESS MODAL */}
       {/* ================================= */}
 
-      {isEditingAddress && (
+      {isAddressModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6">
 
           <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
 
-            {/* Header */}
             <div className="mb-6 flex items-start justify-between gap-4">
 
               <div>
+
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-green-100 text-2xl">
+                  {editingAddressId
+                    ? '✏️'
+                    : '📍'}
+                </div>
+
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {customer?.address
+                  {editingAddressId
                     ? 'Edit Address'
                     : 'Add Address'}
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Add your complete delivery address.
+                  Save an address for faster checkout.
                 </p>
+
               </div>
 
               <button
                 type="button"
                 onClick={
-                  handleCloseEditAddress
+                  handleCloseAddressModal
                 }
                 disabled={
                   isSavingAddress
@@ -1854,14 +2680,150 @@ function CustomerDashboard() {
 
             </div>
 
-            {/* Address Form */}
             <form
               onSubmit={
                 handleSaveAddress
               }
             >
 
-              {/* House / Flat */}
+              {/* Address Type */}
+
+              <div className="mb-5">
+
+                <label
+                  htmlFor="customer-address-label"
+                  className="mb-2 block text-sm font-medium text-gray-700"
+                >
+                  Address Type
+                  <span className="ml-1 text-red-500">
+                    *
+                  </span>
+                </label>
+
+                <div className="grid grid-cols-3 gap-2">
+
+                  {[
+                    {
+                      value: 'Home',
+                      icon: '🏠',
+                    },
+                    {
+                      value: 'Work',
+                      icon: '💼',
+                    },
+                    {
+                      value: 'Other',
+                      icon: '📍',
+                    },
+                  ].map(
+                    (option) => (
+                      <button
+                        key={
+                          option.value
+                        }
+                        type="button"
+                        onClick={() =>
+                          setAddressForm(
+                            (
+                              previous
+                            ) => ({
+                              ...previous,
+                              label:
+                                option.value,
+                            })
+                          )
+                        }
+                        className={`rounded-xl border px-3 py-3 text-sm font-semibold transition ${
+                          addressForm.label ===
+                          option.value
+                            ? 'border-green-600 bg-green-50 text-green-700'
+                            : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="mr-1.5">
+                          {
+                            option.icon
+                          }
+                        </span>
+
+                        {
+                          option.value
+                        }
+                      </button>
+                    )
+                  )}
+
+                </div>
+
+              </div>
+
+              {/* Full Name */}
+
+              <div className="mb-4">
+
+                <label
+                  htmlFor="customer-full-name"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Full Name
+                  <span className="ml-1 text-red-500">
+                    *
+                  </span>
+                </label>
+
+                <input
+                  id="customer-full-name"
+                  name="fullName"
+                  type="text"
+                  value={
+                    addressForm.fullName
+                  }
+                  onChange={
+                    handleAddressChange
+                  }
+                  placeholder="Enter recipient's full name"
+                  maxLength="100"
+                  required
+                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
+
+              </div>
+
+              {/* Phone */}
+
+              <div className="mb-4">
+
+                <label
+                  htmlFor="customer-address-phone"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Mobile Number
+                  <span className="ml-1 text-red-500">
+                    *
+                  </span>
+                </label>
+
+                <input
+                  id="customer-address-phone"
+                  name="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength="10"
+                  value={
+                    addressForm.phone
+                  }
+                  onChange={
+                    handleAddressChange
+                  }
+                  placeholder="Enter 10-digit mobile number"
+                  required
+                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
+
+              </div>
+
+              {/* House Number */}
+
               <div className="mb-4">
 
                 <label
@@ -1892,7 +2854,8 @@ function CustomerDashboard() {
 
               </div>
 
-              {/* Street / Area */}
+              {/* Street */}
+
               <div className="mb-4">
 
                 <label
@@ -1924,6 +2887,7 @@ function CustomerDashboard() {
               </div>
 
               {/* Address Line 2 */}
+
               <div className="mb-4">
 
                 <label
@@ -1955,9 +2919,9 @@ function CustomerDashboard() {
               </div>
 
               {/* City + State */}
+
               <div className="mb-4 grid gap-4 sm:grid-cols-2">
 
-                {/* City */}
                 <div>
 
                   <label
@@ -1965,7 +2929,6 @@ function CustomerDashboard() {
                     className="mb-1.5 block text-sm font-medium text-gray-700"
                   >
                     City
-
                     <span className="ml-1 text-red-500">
                       *
                     </span>
@@ -1989,7 +2952,6 @@ function CustomerDashboard() {
 
                 </div>
 
-                {/* State */}
                 <div>
 
                   <label
@@ -1997,7 +2959,6 @@ function CustomerDashboard() {
                     className="mb-1.5 block text-sm font-medium text-gray-700"
                   >
                     State
-
                     <span className="ml-1 text-red-500">
                       *
                     </span>
@@ -2024,6 +2985,7 @@ function CustomerDashboard() {
               </div>
 
               {/* Pincode */}
+
               <div className="mb-4">
 
                 <label
@@ -2031,7 +2993,6 @@ function CustomerDashboard() {
                   className="mb-1.5 block text-sm font-medium text-gray-700"
                 >
                   Pincode
-
                   <span className="ml-1 text-red-500">
                     *
                   </span>
@@ -2057,7 +3018,8 @@ function CustomerDashboard() {
               </div>
 
               {/* Landmark */}
-              <div className="mb-4">
+
+              <div className="mb-5">
 
                 <label
                   htmlFor="customer-landmark"
@@ -2087,43 +3049,6 @@ function CustomerDashboard() {
 
               </div>
 
-              {/* Address Type */}
-              <div className="mb-5">
-
-                <label
-                  htmlFor="customer-address-type"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
-                  Address Type
-                </label>
-
-                <select
-                  id="customer-address-type"
-                  name="addressType"
-                  value={
-                    addressForm.addressType
-                  }
-                  onChange={
-                    handleAddressChange
-                  }
-                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
-                >
-                  <option value="Home">
-                    Home
-                  </option>
-
-                  <option value="Work">
-                    Work
-                  </option>
-
-                  <option value="Other">
-                    Other
-                  </option>
-                </select>
-
-              </div>
-
-              {/* Message */}
               {addressMessage && (
                 <div
                   className={`mb-5 rounded-xl px-4 py-3 text-sm ${
@@ -2137,13 +3062,12 @@ function CustomerDashboard() {
                 </div>
               )}
 
-              {/* Buttons */}
               <div className="flex gap-3">
 
                 <button
                   type="button"
                   onClick={
-                    handleCloseEditAddress
+                    handleCloseAddressModal
                   }
                   disabled={
                     isSavingAddress
@@ -2162,6 +3086,8 @@ function CustomerDashboard() {
                 >
                   {isSavingAddress
                     ? 'Saving...'
+                    : editingAddressId
+                    ? 'Update Address'
                     : 'Save Address'}
                 </button>
 
@@ -2170,6 +3096,549 @@ function CustomerDashboard() {
             </form>
 
           </div>
+        </div>
+      )}
+
+      {/* ================================= */}
+      {/* EMAIL VERIFICATION MODAL */}
+      {/* ================================= */}
+
+      {isVerifyingEmail && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 px-4 py-6">
+
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+
+            <div className="mb-6 flex items-start justify-between gap-4">
+
+              <div>
+
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-green-100 text-2xl">
+                  ✉️
+                </div>
+
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Verify Email
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-gray-500">
+                  We'll send a 6-digit verification code to:
+                </p>
+
+                <p className="mt-1 break-all font-semibold text-green-700">
+                  {customer?.email}
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  handleCloseEmailVerification
+                }
+                disabled={
+                  isSendingEmailOtp ||
+                  isVerifyingEmailOtp
+                }
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-lg text-gray-500 transition hover:bg-gray-200 disabled:opacity-50"
+              >
+                ×
+              </button>
+
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                handleSendEmailVerificationOtp
+              }
+              disabled={
+                isSendingEmailOtp ||
+                emailResendCooldown > 0
+              }
+              className="mb-5 w-full rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSendingEmailOtp
+                ? 'Sending OTP...'
+                : emailResendCooldown > 0
+                ? `Resend OTP in ${emailResendCooldown}s`
+                : 'Send Verification OTP'}
+            </button>
+
+            <form
+              onSubmit={
+                handleVerifyEmailOtp
+              }
+            >
+
+              <div className="mb-5">
+
+                <label
+                  htmlFor="email-verification-otp"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  Enter Verification OTP
+                </label>
+
+                <input
+                  id="email-verification-otp"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength="6"
+                  value={
+                    emailOtp
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setEmailOtp(
+                      event.target.value
+                        .replace(
+                          /\D/g,
+                          ''
+                        )
+                        .slice(
+                          0,
+                          6
+                        )
+                    )
+                  }
+                  placeholder="Enter 6-digit OTP"
+                  className="w-full rounded-xl border border-gray-200 bg-[#FFFDF5] px-4 py-3 text-center text-lg tracking-[0.4em] outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
+
+              </div>
+
+              {emailVerificationMessage && (
+                <div
+                  className={`mb-5 rounded-xl px-4 py-3 text-sm ${
+                    emailVerificationMessageType ===
+                    'success'
+                      ? 'bg-green-50 text-green-700'
+                      : 'bg-red-50 text-red-600'
+                  }`}
+                >
+                  {
+                    emailVerificationMessage
+                  }
+                </div>
+              )}
+
+              <div className="flex gap-3">
+
+                <button
+                  type="button"
+                  onClick={
+                    handleCloseEmailVerification
+                  }
+                  disabled={
+                    isSendingEmailOtp ||
+                    isVerifyingEmailOtp
+                  }
+                  className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    isVerifyingEmailOtp ||
+                    !emailOtp
+                  }
+                  className="flex-1 rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isVerifyingEmailOtp
+                    ? 'Verifying...'
+                    : 'Verify Email'}
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ================================= */}
+      {/* SETTINGS MODAL */}
+      {/* ================================= */}
+
+      {showSettings && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 px-4 py-6">
+
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white shadow-2xl">
+
+            {/* Settings Header */}
+
+            <div className="border-b border-gray-100 p-6 sm:p-8">
+
+              <div className="flex items-start justify-between gap-4">
+
+                <div>
+
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-green-100 text-2xl">
+                    ⚙️
+                  </div>
+
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Profile Settings
+                  </h2>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Manage your account and preferences.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={
+                    handleCloseSettings
+                  }
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-lg text-gray-500 transition hover:bg-gray-200"
+                >
+                  ×
+                </button>
+
+              </div>
+
+            </div>
+
+            <div className="space-y-6 p-6 sm:p-8">
+
+              {/* Account Settings */}
+
+              <div>
+
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">
+                  Account
+                </h3>
+
+                <div className="overflow-hidden rounded-2xl border border-gray-100">
+
+                  {/* Profile */}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCloseSettings()
+                      handleOpenEditProfile()
+                    }}
+                    className="flex w-full items-center gap-4 border-b border-gray-100 p-4 text-left transition hover:bg-green-50"
+                  >
+
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
+                      👤
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+
+                      <p className="font-semibold text-gray-900">
+                        Personal Information
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Name, mobile number and email
+                      </p>
+
+                    </div>
+
+                    <span className="text-gray-400">
+                      →
+                    </span>
+
+                  </button>
+
+                  {/* Email */}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCloseSettings()
+
+                      if (
+                        customer?.email
+                      ) {
+                        handleOpenEmailVerification()
+                      } else {
+                        handleOpenEditProfile()
+                      }
+                    }}
+                    className="flex w-full items-center gap-4 border-b border-gray-100 p-4 text-left transition hover:bg-green-50"
+                  >
+
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
+                      ✉️
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+
+                      <p className="font-semibold text-gray-900">
+                        Email Verification
+                      </p>
+
+                      <p className="mt-0.5 break-all text-xs text-gray-500">
+                        {customer?.email
+                          ? customer.email
+                          : 'Add an email address'}
+                      </p>
+
+                    </div>
+
+                    {customer?.email_verified ? (
+                      <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                        Verified
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                        Pending
+                      </span>
+                    )}
+
+                  </button>
+
+                  {/* Address */}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCloseSettings()
+                      setAddressMessage('')
+                      setAddressMessageType('')
+                      setIsAddressModalOpen(
+                        false
+                      )
+
+                      window.setTimeout(() => {
+                        const token =
+                          getCustomerToken()
+
+                        if (token) {
+                          fetchAddresses(
+                            token
+                          )
+                        }
+                      }, 0)
+                    }}
+                    className="flex w-full items-center gap-4 p-4 text-left transition hover:bg-green-50"
+                  >
+
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
+                      📍
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+
+                      <p className="font-semibold text-gray-900">
+                        Delivery Address
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        {addresses.length > 0
+                          ? `${addresses.length} saved address${addresses.length === 1 ? '' : 'es'}`
+                          : 'Add your delivery address'}
+                      </p>
+
+                    </div>
+
+                    <span className="text-gray-400">
+                      →
+                    </span>
+
+                  </button>
+
+                </div>
+
+              </div>
+
+              {/* Notifications */}
+
+              <div>
+
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">
+                  Notifications
+                </h3>
+
+                <div className="overflow-hidden rounded-2xl border border-gray-100">
+
+                  {/* Order Notifications */}
+
+                  <div className="flex items-center gap-4 border-b border-gray-100 p-4">
+
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
+                      📦
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+
+                      <p className="font-semibold text-gray-900">
+                        Order Updates
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Updates about your orders
+                      </p>
+
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOrderNotifications(
+                          (previous) =>
+                            !previous
+                        )
+                      }
+                      className={`relative h-6 w-11 rounded-full transition ${
+                        orderNotifications
+                          ? 'bg-green-600'
+                          : 'bg-gray-300'
+                      }`}
+                    >
+
+                      <span
+                        className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition ${
+                          orderNotifications
+                            ? 'left-6'
+                            : 'left-1'
+                        }`}
+                      />
+
+                    </button>
+
+                  </div>
+
+                  {/* Offers */}
+
+                  <div className="flex items-center gap-4 p-4">
+
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
+                      🎁
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+
+                      <p className="font-semibold text-gray-900">
+                        Offers & Updates
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Special offers and announcements
+                      </p>
+
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOffersNotifications(
+                          (previous) =>
+                            !previous
+                        )
+                      }
+                      className={`relative h-6 w-11 rounded-full transition ${
+                        offersNotifications
+                          ? 'bg-green-600'
+                          : 'bg-gray-300'
+                      }`}
+                    >
+
+                      <span
+                        className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition ${
+                          offersNotifications
+                            ? 'left-6'
+                            : 'left-1'
+                        }`}
+                      />
+
+                    </button>
+
+                  </div>
+
+                </div>
+
+                <p className="mt-2 text-xs text-gray-400">
+                  Notification preferences are currently saved for this session.
+                </p>
+
+              </div>
+
+              {/* Security */}
+
+              <div>
+
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">
+                  Security
+                </h3>
+
+                <div className="overflow-hidden rounded-2xl border border-gray-100">
+
+                  <div className="flex items-center gap-4 p-4">
+
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 text-xl">
+                      🔐
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+
+                      <p className="font-semibold text-gray-900">
+                        Account Security
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Your account uses OTP-based authentication.
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* Logout */}
+
+              <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
+
+                <div className="flex items-center gap-4">
+
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100 text-xl">
+                    🚪
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+
+                    <p className="font-semibold text-gray-900">
+                      Logout
+                    </p>
+
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      Sign out of your Jaya's Kitchen account.
+                    </p>
+
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={
+                      handleLogout
+                    }
+                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                  >
+                    Logout
+                  </button>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
         </div>
       )}
 
