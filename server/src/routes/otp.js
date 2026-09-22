@@ -278,6 +278,10 @@ router.put(
         })
       }
 
+      // ===============================
+      // CHECK DUPLICATE MOBILE
+      // ===============================
+
       const phoneResult =
         await pool.query(
           `
@@ -302,6 +306,10 @@ router.put(
             'This mobile number is already linked to another account.',
         })
       }
+
+      // ===============================
+      // CHECK DUPLICATE EMAIL
+      // ===============================
 
       if (cleanEmail) {
         const emailResult =
@@ -329,6 +337,10 @@ router.put(
           })
         }
       }
+
+      // ===============================
+      // UPDATE CUSTOMER
+      // ===============================
 
       const result =
         await pool.query(
@@ -525,7 +537,11 @@ router.put(
         })
       }
 
-      if (!/^[0-9]{6}$/.test(cleanPincode)) {
+      if (
+        !/^[0-9]{6}$/.test(
+          cleanPincode
+        )
+      ) {
         return res.status(400).json({
           success: false,
           message:
@@ -706,6 +722,7 @@ router.post('/send', async (req, res) => {
   try {
     const {
       method,
+      authMode,
       phone,
       email,
       name,
@@ -729,15 +746,91 @@ router.post('/send', async (req, res) => {
     }
 
     // ===============================
+    // VALIDATE AUTH MODE
+    // ===============================
+
+    if (
+      authMode !== 'login' &&
+      authMode !== 'signup'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Invalid authentication mode.',
+      })
+    }
+
+    const isSignup =
+      authMode === 'signup'
+
+    // ===============================
+    // CLEAN INPUT
+    // ===============================
+
+    const cleanPhone =
+      typeof phone === 'string'
+        ? phone.trim()
+        : ''
+
+    const cleanEmail =
+      typeof email === 'string'
+        ? email.trim().toLowerCase()
+        : ''
+
+    const cleanName =
+      typeof name === 'string'
+        ? name.trim()
+        : ''
+
+    // ===============================
+    // SIGNUP VALIDATION
+    // ===============================
+
+    if (isSignup) {
+      if (!cleanName) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Full name is required to create an account.',
+        })
+      }
+
+      if (cleanName.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Full name must be 100 characters or less.',
+        })
+      }
+
+      if (
+        !cleanPhone ||
+        !isValidPhone(cleanPhone)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Please enter a valid 10-digit mobile number.',
+        })
+      }
+
+      if (
+        !cleanEmail ||
+        !isValidEmail(cleanEmail)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Please enter a valid email address.',
+        })
+      }
+    }
+
+    // ===============================
     // MOBILE OTP
     // ===============================
 
     if (method === 'mobile') {
-      const cleanPhone =
-        typeof phone === 'string'
-          ? phone.trim()
-          : ''
-
       if (
         !cleanPhone ||
         !isValidPhone(cleanPhone)
@@ -798,10 +891,10 @@ router.post('/send', async (req, res) => {
       }
 
       // --------------------------------
-      // FIND CUSTOMER
+      // FIND CUSTOMER BY MOBILE
       // --------------------------------
 
-      const customerResult =
+      const mobileCustomerResult =
         await pool.query(
           `
           SELECT
@@ -816,14 +909,62 @@ router.post('/send', async (req, res) => {
           [cleanPhone]
         )
 
-      const customer =
-        customerResult.rows[0] || null
+      const mobileCustomer =
+        mobileCustomerResult.rows[0] || null
 
       // --------------------------------
-      // LOGIN CUSTOMER MUST EXIST
+      // SIGNUP:
+      // CHECK MOBILE DUPLICATE
       // --------------------------------
 
-      if (!name && !customer) {
+      if (isSignup) {
+        if (mobileCustomer) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'An account already exists with this mobile number. Please login instead.',
+          })
+        }
+
+        // --------------------------------
+        // CHECK EMAIL DUPLICATE
+        // --------------------------------
+
+        const emailCustomerResult =
+          await pool.query(
+            `
+            SELECT
+              id,
+              name,
+              phone,
+              email
+            FROM customers
+            WHERE LOWER(email) = $1
+            LIMIT 1
+            `,
+            [cleanEmail]
+          )
+
+        if (
+          emailCustomerResult.rows.length > 0
+        ) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'An account already exists with this email address. Please login instead.',
+          })
+        }
+      }
+
+      // --------------------------------
+      // LOGIN:
+      // CUSTOMER MUST EXIST
+      // --------------------------------
+
+      if (
+        !isSignup &&
+        !mobileCustomer
+      ) {
         return res.status(404).json({
           success: false,
           message:
@@ -843,7 +984,6 @@ router.post('/send', async (req, res) => {
 
       // --------------------------------
       // SEND OTP THROUGH 2FACTOR
-      // MANUAL GENERATION
       // --------------------------------
 
       const internationalPhone =
@@ -925,11 +1065,6 @@ router.post('/send', async (req, res) => {
     // ===============================
 
     if (method === 'email') {
-      const cleanEmail =
-        typeof email === 'string'
-          ? email.trim().toLowerCase()
-          : ''
-
       if (
         !cleanEmail ||
         !isValidEmail(cleanEmail)
@@ -969,6 +1104,10 @@ router.post('/send', async (req, res) => {
         })
       }
 
+      // --------------------------------
+      // FIND CUSTOMER BY EMAIL
+      // --------------------------------
+
       const customerResult =
         await pool.query(
           `
@@ -987,13 +1126,69 @@ router.post('/send', async (req, res) => {
       const customer =
         customerResult.rows[0] || null
 
-      if (!name && !customer) {
+      // --------------------------------
+      // SIGNUP:
+      // CHECK EMAIL DUPLICATE
+      // --------------------------------
+
+      if (isSignup) {
+        if (customer) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'An account already exists with this email address. Please login instead.',
+          })
+        }
+
+        // --------------------------------
+        // CHECK MOBILE DUPLICATE
+        // --------------------------------
+
+        const mobileCustomerResult =
+          await pool.query(
+            `
+            SELECT
+              id,
+              name,
+              phone,
+              email
+            FROM customers
+            WHERE phone = $1
+            LIMIT 1
+            `,
+            [cleanPhone]
+          )
+
+        if (
+          mobileCustomerResult.rows.length > 0
+        ) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'An account already exists with this mobile number. Please login instead.',
+          })
+        }
+      }
+
+      // --------------------------------
+      // LOGIN:
+      // CUSTOMER MUST EXIST
+      // --------------------------------
+
+      if (
+        !isSignup &&
+        !customer
+      ) {
         return res.status(404).json({
           success: false,
           message:
             'No account found with this email address. Please create an account first.',
         })
       }
+
+      // --------------------------------
+      // GENERATE EMAIL OTP
+      // --------------------------------
 
       const otp = generateOtp()
 
@@ -1008,6 +1203,10 @@ router.post('/send', async (req, res) => {
               1000
         )
 
+      // --------------------------------
+      // REMOVE OLD OTP
+      // --------------------------------
+
       await pool.query(
         `
         DELETE FROM customer_otps
@@ -1016,6 +1215,10 @@ router.post('/send', async (req, res) => {
         `,
         [cleanEmail]
       )
+
+      // --------------------------------
+      // STORE NEW OTP
+      // --------------------------------
 
       await pool.query(
         `
@@ -1134,6 +1337,10 @@ router.post('/send', async (req, res) => {
         `,
       })
 
+      // --------------------------------
+      // CHECK RESEND RESPONSE
+      // --------------------------------
+
       if (error) {
         console.error(
           'Resend email error:',
@@ -1155,6 +1362,10 @@ router.post('/send', async (req, res) => {
             'Unable to send OTP email. Please try again.',
         })
       }
+
+      // --------------------------------
+      // START EMAIL COOLDOWN
+      // --------------------------------
 
       otpCooldowns.set(
         cooldownKey,
@@ -1197,6 +1408,7 @@ router.post('/verify', async (req, res) => {
   try {
     const {
       method,
+      authMode,
       phone,
       email,
       otp,
@@ -1219,6 +1431,24 @@ router.post('/verify', async (req, res) => {
     }
 
     // ===============================
+    // VALIDATE AUTH MODE
+    // ===============================
+
+    if (
+      authMode !== 'login' &&
+      authMode !== 'signup'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Invalid authentication mode.',
+      })
+    }
+
+    const isSignup =
+      authMode === 'signup'
+
+    // ===============================
     // VALIDATE OTP
     // ===============================
 
@@ -1233,6 +1463,69 @@ router.post('/verify', async (req, res) => {
       })
     }
 
+    // ===============================
+    // CLEAN INPUT
+    // ===============================
+
+    const cleanPhone =
+      typeof phone === 'string'
+        ? phone.trim()
+        : ''
+
+    const cleanEmail =
+      typeof email === 'string'
+        ? email.trim().toLowerCase()
+        : ''
+
+    const cleanName =
+      typeof name === 'string'
+        ? name.trim()
+        : ''
+
+    // ===============================
+    // SIGNUP VALIDATION
+    // ===============================
+
+    if (isSignup) {
+      if (!cleanName) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Full name is required to create an account.',
+        })
+      }
+
+      if (cleanName.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Full name must be 100 characters or less.',
+        })
+      }
+
+      if (
+        !cleanPhone ||
+        !isValidPhone(cleanPhone)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Please enter a valid 10-digit mobile number.',
+        })
+      }
+
+      if (
+        !cleanEmail ||
+        !isValidEmail(cleanEmail)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Please enter a valid email address.',
+        })
+      }
+    }
+
     let customer = null
     let otpRecord = null
 
@@ -1241,11 +1534,6 @@ router.post('/verify', async (req, res) => {
     // ===============================
 
     if (method === 'mobile') {
-      const cleanPhone =
-        typeof phone === 'string'
-          ? phone.trim()
-          : ''
-
       if (
         !cleanPhone ||
         !isValidPhone(cleanPhone)
@@ -1330,7 +1618,7 @@ router.post('/verify', async (req, res) => {
       }
 
       // --------------------------------
-      // FIND CUSTOMER
+      // FIND CUSTOMER BY MOBILE
       // --------------------------------
 
       const customerResult =
@@ -1363,47 +1651,78 @@ router.post('/verify', async (req, res) => {
         customerResult.rows[0] || null
 
       // ===============================
-      // CREATE CUSTOMER
+      // LOGIN
       // ===============================
 
-      if (!customer) {
-        if (!name) {
-          return res.status(400).json({
+      if (!isSignup) {
+        if (!customer) {
+          return res.status(404).json({
             success: false,
             message:
-              'Full name is required to create an account.',
+              'No account found with this mobile number. Please create an account first.',
+          })
+        }
+      }
+
+      // ===============================
+      // SIGNUP
+      // ===============================
+
+      if (isSignup) {
+        // --------------------------------
+        // CHECK MOBILE AGAIN
+        // --------------------------------
+
+        if (customer) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'An account already exists with this mobile number. Please login instead.',
           })
         }
 
-        const cleanName =
-          typeof name === 'string'
-            ? name.trim()
-            : ''
+        // --------------------------------
+        // CHECK EMAIL AGAIN
+        // --------------------------------
 
-        if (!cleanName) {
-          return res.status(400).json({
+        const emailCustomerResult =
+          await pool.query(
+            `
+            SELECT
+              id,
+              name,
+              phone,
+              email
+            FROM customers
+            WHERE LOWER(email) = $1
+            LIMIT 1
+            `,
+            [cleanEmail]
+          )
+
+        if (
+          emailCustomerResult.rows.length > 0
+        ) {
+          return res.status(409).json({
             success: false,
             message:
-              'Please enter your full name.',
+              'An account already exists with this email address. Please login instead.',
           })
         }
 
-        if (cleanName.length > 100) {
-          return res.status(400).json({
-            success: false,
-            message:
-              'Full name must be 100 characters or less.',
-          })
-        }
+        // --------------------------------
+        // CREATE CUSTOMER
+        // --------------------------------
 
         const result =
           await pool.query(
             `
             INSERT INTO customers (
               name,
-              phone
+              phone,
+              email
             )
-            VALUES ($1, $2)
+            VALUES ($1, $2, $3)
             RETURNING
               id,
               name,
@@ -1424,6 +1743,7 @@ router.post('/verify', async (req, res) => {
             [
               cleanName,
               cleanPhone,
+              cleanEmail,
             ]
           )
 
@@ -1449,7 +1769,9 @@ router.post('/verify', async (req, res) => {
       return res.json({
         success: true,
         message:
-          'OTP verified successfully.',
+          isSignup
+            ? 'Account created successfully.'
+            : 'Login successful.',
         token,
         customer,
       })
@@ -1460,11 +1782,6 @@ router.post('/verify', async (req, res) => {
     // ===============================
 
     if (method === 'email') {
-      const cleanEmail =
-        typeof email === 'string'
-          ? email.trim().toLowerCase()
-          : ''
-
       if (
         !cleanEmail ||
         !isValidEmail(cleanEmail)
@@ -1475,6 +1792,10 @@ router.post('/verify', async (req, res) => {
             'Please enter a valid email address.',
         })
       }
+
+      // --------------------------------
+      // FIND OTP
+      // --------------------------------
 
       const otpResult =
         await pool.query(
@@ -1491,6 +1812,104 @@ router.post('/verify', async (req, res) => {
 
       otpRecord =
         otpResult.rows[0] || null
+
+      if (!otpRecord) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'OTP not found or expired. Please request a new OTP.',
+        })
+      }
+
+      // --------------------------------
+      // CHECK EXPIRY
+      // --------------------------------
+
+      if (
+        new Date(otpRecord.expires_at) <
+        new Date()
+      ) {
+        await pool.query(
+          `
+          DELETE FROM customer_otps
+          WHERE id = $1
+          `,
+          [otpRecord.id]
+        )
+
+        return res.status(400).json({
+          success: false,
+          message:
+            'OTP has expired. Please request a new OTP.',
+        })
+      }
+
+      // --------------------------------
+      // CHECK MAX ATTEMPTS
+      // --------------------------------
+
+      if (
+        otpRecord.attempts >=
+        MAX_OTP_ATTEMPTS
+      ) {
+        await pool.query(
+          `
+          DELETE FROM customer_otps
+          WHERE id = $1
+          `,
+          [otpRecord.id]
+        )
+
+        return res.status(429).json({
+          success: false,
+          message:
+            'Too many incorrect attempts. Please request a new OTP.',
+        })
+      }
+
+      // --------------------------------
+      // COMPARE OTP
+      // --------------------------------
+
+      const otpMatches =
+        await bcrypt.compare(
+          otp,
+          otpRecord.otp_hash
+        )
+
+      if (!otpMatches) {
+        await pool.query(
+          `
+          UPDATE customer_otps
+          SET attempts = attempts + 1
+          WHERE id = $1
+          `,
+          [otpRecord.id]
+        )
+
+        return res.status(401).json({
+          success: false,
+          message:
+            'Incorrect OTP. Please try again.',
+        })
+      }
+
+      // --------------------------------
+      // MARK OTP VERIFIED
+      // --------------------------------
+
+      await pool.query(
+        `
+        UPDATE customer_otps
+        SET verified = TRUE
+        WHERE id = $1
+        `,
+        [otpRecord.id]
+      )
+
+      // --------------------------------
+      // FIND CUSTOMER BY EMAIL
+      // --------------------------------
 
       const customerResult =
         await pool.query(
@@ -1521,117 +1940,69 @@ router.post('/verify', async (req, res) => {
       customer =
         customerResult.rows[0] || null
 
-      if (!otpRecord) {
-        return res.status(400).json({
-          success: false,
-          message:
-            'OTP not found or expired. Please request a new OTP.',
-        })
-      }
+      // ===============================
+      // LOGIN
+      // ===============================
 
-      if (
-        new Date(otpRecord.expires_at) <
-        new Date()
-      ) {
-        await pool.query(
-          `
-          DELETE FROM customer_otps
-          WHERE id = $1
-          `,
-          [otpRecord.id]
-        )
-
-        return res.status(400).json({
-          success: false,
-          message:
-            'OTP has expired. Please request a new OTP.',
-        })
-      }
-
-      if (
-        otpRecord.attempts >=
-        MAX_OTP_ATTEMPTS
-      ) {
-        await pool.query(
-          `
-          DELETE FROM customer_otps
-          WHERE id = $1
-          `,
-          [otpRecord.id]
-        )
-
-        return res.status(429).json({
-          success: false,
-          message:
-            'Too many incorrect attempts. Please request a new OTP.',
-        })
-      }
-
-      const otpMatches =
-        await bcrypt.compare(
-          otp,
-          otpRecord.otp_hash
-        )
-
-      if (!otpMatches) {
-        await pool.query(
-          `
-          UPDATE customer_otps
-          SET attempts = attempts + 1
-          WHERE id = $1
-          `,
-          [otpRecord.id]
-        )
-
-        return res.status(401).json({
-          success: false,
-          message:
-            'Incorrect OTP. Please try again.',
-        })
-      }
-
-      await pool.query(
-        `
-        UPDATE customer_otps
-        SET verified = TRUE
-        WHERE id = $1
-        `,
-        [otpRecord.id]
-      )
-
-      // --------------------------------
-      // CREATE EMAIL CUSTOMER
-      // --------------------------------
-
-      if (!customer) {
-        if (!name) {
-          return res.status(400).json({
+      if (!isSignup) {
+        if (!customer) {
+          return res.status(404).json({
             success: false,
             message:
-              'Full name is required to create an account.',
+              'No account found with this email address. Please create an account first.',
+          })
+        }
+      }
+
+      // ===============================
+      // SIGNUP
+      // ===============================
+
+      if (isSignup) {
+        // --------------------------------
+        // CHECK EMAIL AGAIN
+        // --------------------------------
+
+        if (customer) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'An account already exists with this email address. Please login instead.',
           })
         }
 
-        const cleanName =
-          typeof name === 'string'
-            ? name.trim()
-            : ''
+        // --------------------------------
+        // CHECK MOBILE AGAIN
+        // --------------------------------
 
-        if (!cleanName) {
-          return res.status(400).json({
+        const mobileCustomerResult =
+          await pool.query(
+            `
+            SELECT
+              id,
+              name,
+              phone,
+              email
+            FROM customers
+            WHERE phone = $1
+            LIMIT 1
+            `,
+            [cleanPhone]
+          )
+
+        if (
+          mobileCustomerResult.rows.length > 0
+        ) {
+          return res.status(409).json({
             success: false,
             message:
-              'Please enter your full name.',
+              'An account already exists with this mobile number. Please login instead.',
           })
         }
 
-        if (cleanName.length > 100) {
-          return res.status(400).json({
-            success: false,
-            message:
-              'Full name must be 100 characters or less.',
-          })
-        }
+        // --------------------------------
+        // CREATE CUSTOMER
+        // --------------------------------
 
         const result =
           await pool.query(
@@ -1661,7 +2032,7 @@ router.post('/verify', async (req, res) => {
             `,
             [
               cleanName,
-              '',
+              cleanPhone,
               cleanEmail,
             ]
           )
@@ -1670,8 +2041,9 @@ router.post('/verify', async (req, res) => {
           result.rows[0]
       }
 
-      const token =
-        createCustomerToken(customer)
+      // --------------------------------
+      // CLEAR OTP
+      // --------------------------------
 
       await pool.query(
         `
@@ -1681,14 +2053,27 @@ router.post('/verify', async (req, res) => {
         [otpRecord.id]
       )
 
+      // --------------------------------
+      // CLEAR EMAIL COOLDOWN
+      // --------------------------------
+
       otpCooldowns.delete(
         `email:${cleanEmail}`
       )
 
+      // --------------------------------
+      // CREATE JWT
+      // --------------------------------
+
+      const token =
+        createCustomerToken(customer)
+
       return res.json({
         success: true,
         message:
-          'OTP verified successfully.',
+          isSignup
+            ? 'Account created successfully.'
+            : 'Login successful.',
         token,
         customer,
       })
