@@ -1,21 +1,36 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   'https://jayas-kitchen-api.onrender.com'
 
-/**
- * Base API request helper
- */
+const TOKEN_KEY =
+  '@jayas_kitchen_customer_token'
+
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  })
+  const token =
+    await AsyncStorage.getItem(TOKEN_KEY)
+
+  const response = await fetch(
+    `${API_URL}${endpoint}`,
+    {
+      ...options,
+      headers: {
+        'Content-Type':
+          'application/json',
+        ...(token
+          ? {
+              Authorization:
+                `Bearer ${token}`,
+            }
+          : {}),
+        ...(options.headers || {}),
+      },
+    }
+  )
 
   let data: any = null
 
@@ -37,49 +52,53 @@ export async function apiRequest<T>(
   return data as T
 }
 
-/**
- * GET request
- */
-export function apiGet<T>(endpoint: string): Promise<T> {
+export function apiGet<T>(
+  endpoint: string
+): Promise<T> {
   return apiRequest<T>(endpoint)
 }
 
-/**
- * POST request
- */
 export function apiPost<T>(
   endpoint: string,
   body?: unknown
 ): Promise<T> {
-  return apiRequest<T>(endpoint, {
-    method: 'POST',
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  return apiRequest<T>(
+    endpoint,
+    {
+      method: 'POST',
+      body:
+        body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
+    }
+  )
 }
 
-/**
- * PUT request
- */
 export function apiPut<T>(
   endpoint: string,
   body?: unknown
 ): Promise<T> {
-  return apiRequest<T>(endpoint, {
-    method: 'PUT',
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  return apiRequest<T>(
+    endpoint,
+    {
+      method: 'PUT',
+      body:
+        body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
+    }
+  )
 }
 
-/**
- * DELETE request
- */
-export function apiDelete<T>(endpoint: string): Promise<T> {
-  return apiRequest<T>(endpoint, {
-    method: 'DELETE',
-  })
+export function apiDelete<T>(
+  endpoint: string
+): Promise<T> {
+  return apiRequest<T>(
+    endpoint,
+    {
+      method: 'DELETE',
+    }
+  )
 }
 
-/**
- * Export API URL when needed elsewhere.
- */
 export { API_URL }
