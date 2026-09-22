@@ -28,13 +28,10 @@ function CustomerAuth() {
 
   useEffect(() => {
     const token =
-      localStorage.getItem(
-        'customerToken'
-      )
+      localStorage.getItem('customerToken')
 
     if (token) {
-      window.location.href =
-        '/dashboard'
+      window.location.href = '/dashboard'
     }
   }, [])
 
@@ -106,7 +103,10 @@ function CustomerAuth() {
     setMessageType('')
 
     try {
-      // Basic frontend validation
+      // ===============================
+      // BASIC FRONTEND VALIDATION
+      // ===============================
+
       if (
         isSignup &&
         !formData.name.trim()
@@ -152,6 +152,10 @@ function CustomerAuth() {
         return
       }
 
+      // ===============================
+      // SEND OTP REQUEST
+      // ===============================
+
       const response = await fetch(
         `${API_URL}/api/otp/send`,
         {
@@ -164,12 +168,17 @@ function CustomerAuth() {
 
           body: JSON.stringify({
             method: loginMethod,
+
+            authMode,
+
             phone:
               formData.phone.trim(),
+
             email:
               formData.email
                 .trim()
                 .toLowerCase(),
+
             name: isSignup
               ? formData.name.trim()
               : undefined,
@@ -225,6 +234,10 @@ function CustomerAuth() {
     setMessageType('')
 
     try {
+      // ===============================
+      // OTP VALIDATION
+      // ===============================
+
       if (
         !/^[0-9]{6}$/.test(
           formData.otp.trim()
@@ -239,6 +252,10 @@ function CustomerAuth() {
         return
       }
 
+      // ===============================
+      // VERIFY OTP REQUEST
+      // ===============================
+
       const response = await fetch(
         `${API_URL}/api/otp/verify`,
         {
@@ -251,14 +268,20 @@ function CustomerAuth() {
 
           body: JSON.stringify({
             method: loginMethod,
+
+            authMode,
+
             phone:
               formData.phone.trim(),
+
             email:
               formData.email
                 .trim()
                 .toLowerCase(),
+
             otp:
               formData.otp.trim(),
+
             name: isSignup
               ? formData.name.trim()
               : undefined,
@@ -295,6 +318,10 @@ function CustomerAuth() {
           data.customer
         )
       )
+
+      // ===============================
+      // SUCCESS MESSAGE
+      // ===============================
 
       setMessage(
         isSignup
@@ -344,6 +371,10 @@ function CustomerAuth() {
     setMessageType('')
 
     try {
+      // ===============================
+      // RESEND OTP REQUEST
+      // ===============================
+
       const response = await fetch(
         `${API_URL}/api/otp/send`,
         {
@@ -356,12 +387,17 @@ function CustomerAuth() {
 
           body: JSON.stringify({
             method: loginMethod,
+
+            authMode,
+
             phone:
               formData.phone.trim(),
+
             email:
               formData.email
                 .trim()
                 .toLowerCase(),
+
             name: isSignup
               ? formData.name.trim()
               : undefined,
@@ -443,8 +479,7 @@ function CustomerAuth() {
               type="button"
               onClick={() => {
                 if (
-                  authMode !==
-                  'login'
+                  authMode !== 'login'
                 ) {
                   switchAuthMode()
                 }
@@ -462,8 +497,7 @@ function CustomerAuth() {
               type="button"
               onClick={() => {
                 if (
-                  authMode !==
-                  'signup'
+                  authMode !== 'signup'
                 ) {
                   switchAuthMode()
                 }
