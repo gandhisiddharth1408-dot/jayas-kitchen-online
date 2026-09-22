@@ -62,6 +62,17 @@ function Navbar() {
       '/dashboard?settings=true'
   }
 
+  // ==========================================
+  // MY ORDERS
+  // ==========================================
+
+  const handleMyOrdersClick = () => {
+    closeMenu()
+
+    window.location.href =
+      '/dashboard?orders=true'
+  }
+
   return (
     <nav className="sticky top-0 z-50 border-b border-green-100 bg-[#FFFDF5]/95 backdrop-blur">
 
@@ -320,6 +331,23 @@ function Navbar() {
 
             {/* Divider */}
             <div className="my-2 border-t border-green-100" />
+
+            {/* My Orders */}
+            {isLoggedIn && (
+              <button
+                type="button"
+                onClick={handleMyOrdersClick}
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-gray-700 transition hover:bg-green-50 hover:text-green-700"
+              >
+                <span className="text-lg">
+                  📦
+                </span>
+
+                <span>
+                  My Orders
+                </span>
+              </button>
+            )}
 
             {/* Settings */}
             {isLoggedIn && (
